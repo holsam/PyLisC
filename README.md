@@ -1,6 +1,6 @@
 # PyLisC
 
-A Python port of the Lamella in-silicon Clearing algorithm
+A Python port of the Lamella in-silico Clearing algorithm
 
 ## Overview
 This is a Python implementation of the Lamella in-silico Clearing (LisC) algorithm originally described in [Bauerlein et al., 2021](https://doi.org/10.1101/2021.04.14.437159) and available as an ImageJ Macro [here](https://github.com/FJBauerlein/LisC_Algorithm), which removes curtaining artefacts and contamination/vacuum constrast from cryo-FIB/ET tilt series.  For information about the differences between PyLisC and the original LisC macro, see the [PyLisC vs LisC section below](#pylisc-vs-lisc). 
@@ -90,8 +90,10 @@ Mask inspection | Visual only, within Fiji | Optional per-tilt vacuum/contaminat
 ## Citation
 If you use PyLisC, please cite the original LisC algorithm:
 ```md
-Bäuerlein FJB, Renner M, El Chami D, Lehnart SE, Pastor-Pareja JC, Fernández-Busnadiego R. *Cryo-electron tomography of large biological specimens vitrified by plunge freezing.* bioRxiv 2021. doi:10.1101/2021.04.14.437159
+Bäuerlein FJB, Renner M, El Chami D, Lehnart SE, Pastor-Pareja JC, Fernández-Busnadiego R. Cryo-electron tomography of large biological specimens vitrified by plunge freezing. bioRxiv 2021. doi:10.1101/2021.04.14.437159
 ```
+
+<br>
 
 [^estimation]: Curtaining that is constant along a direction *u*, where *u* = *cosθ*, *sinθ*, has concentrated Fourier energy a line through the origin which is perpendicular to *u*. Therefore the curtaining angle can be determined by binning the power spectrum (PyLisC uses width 1°), identifying the bin with the most energy, and rotating this 90° to recover the real-space angle.
 
