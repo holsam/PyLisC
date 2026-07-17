@@ -29,6 +29,10 @@ def main(
         Optional[Path],
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option('-v', '--verbose', help='Print additional progress messages')
+    ] = False,
     curtain_angle: Annotated[
         Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)')
@@ -61,10 +65,6 @@ def main(
         float,
         typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width')
     ] = 0.03,
-    verbose: Annotated[
-        bool,
-        typer.Option('-v', '--verbose', help='Print additional progress messages')
-    ] = False,
 ):
     # Set output file path if none provided
     if output_mrc is None:
