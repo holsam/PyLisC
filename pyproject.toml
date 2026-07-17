@@ -1,6 +1,6 @@
 [project]
 name = "pylisc"
-version = "0.0.0"
+version = "0.1.0"
 description = "Python implementation of LisC algorithm"
 readme = "README.md"
 authors = [
