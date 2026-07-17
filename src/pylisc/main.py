@@ -292,7 +292,7 @@ def lisc_clear_frame(
     contamination_region = ndi.binary_dilation(con_raw, iterations=dilate_iterations)
 
     # Fill contamination/vacuum with local gray-scale average before destriping
-    local_gray = ndi.gaussian_blur_fft(hp, sigma=filter_px)
+    local_gray = gaussian_blur_fft(hp, sigma=filter_px)
     cleared = hp.copy()
     cleared = np.where(contamination_region, local_gray, cleared)
     cleared = np.where(vacuum_region, local_gray, cleared)
