@@ -5,7 +5,6 @@ PyLisC: directional destriping (curtaining removal) in Fourier space
 # Import external libraries
 import numpy as np
 
-
 def directional_destripe(frame: np.ndarray, notch_frac: float = 0.02, angle_deg: float = 0.0) -> np.ndarray:
     '''
     Attenuate the Fourier-space line corresponding to stripes running at `angle_deg` from horizontal (0 = horizontal curtaining, ImageJ's suppress=Horizontal case).
