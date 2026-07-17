@@ -7,9 +7,9 @@ import numpy as np
 from scipy import ndimage as ndi
 
 # Import internal PyLisC libraries
-from blur import bandpass_highpass
-from destripe import directional_destripe
-from mask import compute_masks
+from pylisc.blur import bandpass_highpass
+from pylisc.destripe import directional_destripe
+from pylisc.mask import compute_masks
 
 def lisc_clear_frame(
     frame: np.ndarray,

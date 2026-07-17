@@ -12,8 +12,8 @@ except ImportError as e:
     raise ImportError('PyLisC requirements not met. Please see README for information.') from e
 
 # Import internal PyLisC modules
-from estimate_angle import estimate_curtain_angle, plot_angular_energy
-from pipeline import lisc_clear_frame
+from pylisc.estimate_angle import estimate_curtain_angle, plot_angular_energy
+from pylisc.lisc import lisc_clear_frame
 
 # Set up Typer class
 pylisc = typer.Typer()
