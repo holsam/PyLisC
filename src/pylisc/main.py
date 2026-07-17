@@ -33,9 +33,9 @@ def main(
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
     ] = None,
     curtain_angle: Annotated[
-        float,
+        Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)')
-    ] = 0.0,
+    ] = None,
     save_masks: Annotated[
         Optional[Path],
         typer.Option('--masks', help='Path to directory to save per-frame vacuum/contamination masks as TIFF images')
