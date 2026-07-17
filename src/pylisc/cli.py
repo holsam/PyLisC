@@ -29,6 +29,10 @@ def main(
         Optional[Path],
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
     ] = None,
+    pixel_size: Annotated[
+        Optional[float],
+        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header')
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option('-v', '--verbose', help='Print additional progress messages')
@@ -37,30 +41,10 @@ def main(
         Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)', rich_help_panel='De-curtaining options')
     ] = None,
-    save_masks: Annotated[
-        Optional[Path],
-        typer.Option('--masks', help='Path to directory to save per-frame vacuum/contamination masks as TIFF images', rich_help_panel='Mask options')
-    ] = None,
-    pixel_size: Annotated[
-        Optional[float],
-        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header')
-    ] = None,
     filter_threshold: Annotated[
         float,
         typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='De-curtaining options')
     ] = 5000.0,
-    con_mult: Annotated[
-        float,
-        typer.Option('--con-multiplier', help='Contaminant threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    vac_mult: Annotated[
-        float,
-        typer.Option('--vac-multiplier', help='Vacuum threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    dilate_iter: Annotated[
-        int,
-        typer.Option('--iters', help='Binary dilation iterations for masking', rich_help_panel='Mask options')
-    ] = 4,
     notch_frac: Annotated[
         float,
         typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
@@ -69,17 +53,33 @@ def main(
         float,
         typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping', rich_help_panel='De-curtaining options')
     ] = 0.01,
-    clear_vacuum: Annotated[
-        bool,
-        typer.Option('--clear-vacuum', help='Detect bright vacuum regions and replace with neutral local mean', rich_help_panel='Mask options')
-    ] = False,
     clear_contamination: Annotated[
         bool,
         typer.Option('--clear-contamination', help='Detect dark contamination regions and replace with neutral local mean', rich_help_panel='Mask options')
     ] = False,
+    clear_vacuum: Annotated[
+        bool,
+        typer.Option('--clear-vacuum', help='Detect bright vacuum regions and replace with neutral local mean', rich_help_panel='Mask options')
+    ] = False,
+    con_mult: Annotated[
+        float,
+        typer.Option('--con-multiplier', help='Contaminant threshold multiplier on blurred SD', rich_help_panel='Mask options')
+    ] = 1.5,
+    vac_mult: Annotated[
+        float,
+        typer.Option('--vac-multiplier', help='Vacuum threshold multiplier on blurred SD', rich_help_panel='Mask options')
+    ] = 1.5,
     fill_sigma: Annotated[
         Optional[float],
         typer.Option('--fill-sigma', help='Length scale (nm) for the netural fill for cleared regions', rich_help_panel='Mask options')
+    ] = None,
+    dilate_iter: Annotated[
+        int,
+        typer.Option('--iters', help='Binary dilation iterations for masking', rich_help_panel='Mask options')
+    ] = 4,
+    save_masks: Annotated[
+        Optional[Path],
+        typer.Option('--masks', help='Path to directory to save per-frame vacuum/contamination masks as TIFF images', rich_help_panel='Mask options')
     ] = None,
 ):
     # Set output file path if none provided
