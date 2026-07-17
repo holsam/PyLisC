@@ -72,10 +72,6 @@ def main(
     # Set output file path if none provided
     if output_mrc is None:
         output_mrc = f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc'
-    
-    if verbose:
-        print(f'Input file: {input_mrc}')
-        print(f'Output file: {output_mrc}')
 
     # Read data from input_mrc
     with mrcfile.open(input_mrc, permissive=True) as mrc:
@@ -83,9 +79,6 @@ def main(
         voxel_size = mrc.voxel_size # in Ångstroms
     if data.ndim == 2:
         data = data[np.newaxis, ...]
-    
-    if verbose:
-        print(f'Voxel size: {voxel_size}')
 
     # Resolve pixel size
     if pixel_size is None:
@@ -93,15 +86,21 @@ def main(
     if pixel_size <= 0:
         raise ValueError('Pixel size cannot be less than or equal to 0')
 
-    if verbose:
-        print(f'Pixel size: {pixel_size}')
-
     # Create save masks directory if required
     if save_masks is not None:
         save_masks.mkdir(parents=True, exist_ok=True)
 
     # Create placeholder for cleared frames
     cleared_stack = np.empty_like(data, dtype=np.float32)
+
+    # Output processing information if verbose
+    if verbose:
+        print()
+        print(f'Input file: {input_mrc}')
+        print(f'Output file: {output_mrc}')
+        print(f'Voxel size: {voxel_size}')
+        print(f'Pixel size: {pixel_size}')
+        print()
 
     # Apply LisC to each frame
     for i, frame in enumerate(data):
@@ -116,7 +115,6 @@ def main(
             vacuum_multiplier=vac_mult,
             dilate_iterations=dilate_iter,
             destripe_notch_fraction=notch_frac,
-            verbose=verbose,
         )
         cleared_stack[i] = cleared
         if save_masks is not None:
@@ -152,7 +150,6 @@ def bandpass_highpass(frame: np.ndarray, sigma_large: float) -> np.ndarray:
     low = gaussian_blur_fft(frame, sigma=sigma_large)
     return frame - low
 
-
 def directional_destripe(frame: np.ndarray, notch_frac: float = 0.02, angle_deg: float = 0.0) -> np.ndarray:
     '''
     Attenuate the Fourier-space line corresponding to stripes running at `angle_deg` from horizontal (0 = horizontal curtaining, ImageJ's suppress=Horizontal case).
@@ -184,7 +181,6 @@ def lisc_clear_frame(
     vacuum_multiplier: float = 1.5,
     dilate_iterations: int = 4,
     destripe_notch_fraction: float = 0.02,
-    verbose: bool = False,
 ):
     '''
     Apply the LisC pipeline to a single 2D projection
@@ -194,22 +190,16 @@ def lisc_clear_frame(
     sigma_masks = max(6.5 / pixel_size_nm, 0.5)
 
     hp = bandpass_highpass(frame, filter_px)
-    if verbose:
-        print(f'Applied high-pass filter')
 
     # Vacuum mask: bright, low-frequency regions of the raw frame
     vac_blur = ndi.gaussian_filter(frame, sigma=sigma_masks)
     vac_raw = threshold_mask(vac_blur, vacuum_multiplier, greater=True)
     vacuum_region = ndi.binary_dilation(vac_raw, iterations=dilate_iterations)
-    if verbose:
-        print(f'Applied vacuum mask')
 
     # Contamination mask: dark, low-frequency regions of the HP-filtered frame
     con_blur = ndi.gaussian_filter(hp, sigma=sigma_masks)
     con_raw = threshold_mask(con_blur, contaminant_multiplier, greater=False)
     contamination_region = ndi.binary_dilation(con_raw, iterations=dilate_iterations)
-    if verbose:
-        print(f'Applied contamination mask')
 
     # Fill contamination/vacuum with local gray-scale average before destriping
     local_gray = ndi.gaussian_blur_fft(hp, sigma=filter_px)
@@ -219,8 +209,6 @@ def lisc_clear_frame(
 
     # Remove curtaining artefacts in Fourier space, at the given angle
     cleared = directional_destripe(cleared, notch_frac=destripe_notch_fraction, angle_deg=curtain_angle)
-    if verbose:
-        print(f'Destriped curtains')
 
     # Reset vacuum to bright / contamination to zero for downstream masking
     cleared = np.where(vacuum_region, 255.0, cleared)
