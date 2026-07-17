@@ -7,7 +7,13 @@ authors = [
     { name = "Sam Holland", email = "hol_sam@icloud.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "mrcfile>=1.5.4",
+    "numpy>=2.5.1",
+    "scipy>=1.18.0",
+    "tifffile>=2026.7.14",
+    "typer>=0.27.0",
+]
 
 [project.scripts]
 pylisc = "pylisc.main:pylisc"
