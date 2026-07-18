@@ -7,7 +7,7 @@ This is a Python implementation of the Lamella in-silico Clearing (LisC) algorit
 
 Given a low-magnification tilt series MRC, PyLisC:
 1. Removes large-scale brightness modulation with a high-pass filter.
-2. Detects contamination and vacuum regions, and fills them with a local grey-scale average.
+2. Optionally detects contamination and vacuum regions, and fills them with a local grey-scale average.
 3. Removes directional curtaining stripes at a specified angle in Fourier space.
 
 Each tilt image in a stack is processed independently and reassembled into a cleared output MRC.
@@ -38,19 +38,26 @@ pylisc tilt_series.mrc --angle 50
 
 # Manually define the pixel size (instead of reading from MRC header)
 pylisc tilt_series.mrc --pizel-size 4.4
+
+# Clear vacuum and contamination via masking, and save masks
+pylisc tilt_series.mrc --clear-vacuum --clear-contamination --masks masks_dir/
 ```
 
 ### Options
 Option | Default | Description
 --|--|--
+`--pixel-size` | *(read from MRC header)* | Override the pixel size, in nm. Use this if the header value is missing or unreliable.
 `-v`, `--verbose` | `False` | Print per-tilt progress and parameter summary.
 `--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
-`--pixel-size` | *(read from MRC header)* | Override the pixel size, in nm. Use this if the header value is missing or unreliable.
 `--filter-threshold` | `5000.0` | High-pass cutoff, in nm. Large-scale structure below this frequency is removed before masking and destriping.
+`--notch-fraction` | `0.03` | Width of the directional destriping notch, as a fraction of image width. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
+`--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. Keeps large-scale contrast intact; without it the notch also suppresses low frequencies at every angle, not just along the curtain direction. Keep well below the curtain frequency's radius, or curtains start passing through again.
+`--clear-contamination` | `False` | Detect dark contamination and replace it with a neutral local mean. Off by default (decurtaining only). |
+`--clear-vacuum` | `False` | Detect bright vacuum regions and replace them with a neutral local mean. Off by default (decurtaining only). |
 `--con-multiplier` | `1.5` | Contamination threshold, as a multiple of the blurred image's standard deviation.
 `--vac-multiplier` | `1.5` | Vacuum threshold, as a multiple of the blurred image's standard deviation.
+`--fill-sigma` | *(=`--filter-threshold`)* | Length scale (nm) for the netural fill of cleared regions (lower for more local blending). Only used if masking is enabled.
 `--iters` | `4` | Number of binary dilation iterations applied to each mask.
-`--notch-fraction` | `0.03` | Width of the directional destriping notch, as a fraction of image width. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
 `--masks` | *(none)* | Directory to save each frame's vacuum/contamination masks as TIFF, for quality control.
 
 ## Output
@@ -70,6 +77,8 @@ If `--angle` is omitted, `curtain_angle_diagnostic.tiff` is saved alongside the 
 A rough numerical confidence check is the ratio of the peak to the median of the plotted profile. Pure noise (no curtaining) should give a relatively low ratio of around 1, whereas frames with clear curtaining will give higher ratios. `-v`/`--verbose` prints this ratio alongside the estimated angle.
 
 ## Limitations
+### Directional filtering
+Any real structure running parallel to the curtains shares the same Fourier orientation and is attenuated along with them. A narrower `--notch-fraction` limits this but cannot eliminate it where curtains and genuine structure share an angle. Some loss of signal is likely to be observed for these structures.
 
 ## PyLisC vs LisC
 PyLisC follows the same processing logic as the original macro but is not an pixel-identical reimplementation. See the below table for the key differences:
