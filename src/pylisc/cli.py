@@ -16,7 +16,11 @@ from pylisc.estimate_angle import estimate_curtain_angle, plot_angular_energy
 from pylisc.lisc import lisc_clear_frame
 
 # Set up Typer class
-pylisc = typer.Typer(rich_markup_mode='rich')
+pylisc = typer.Typer(
+    rich_markup_mode='rich',
+    add_completion=False,
+    no_args_is_help=True,
+)
 
 # Define command for pylisc
 @pylisc.command()
