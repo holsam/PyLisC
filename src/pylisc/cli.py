@@ -29,6 +29,10 @@ def main(
         Path,
         typer.Argument(help='MRC file to apply LisC algorithm to')
     ],
+    mode: Annotated[
+        Literal['angular', 'linear'],
+        typer.Option('-m', '--mode', help='Method of de-curtaining to use (angular or linear)', rich_help_panel='De-curtaining options')
+    ],
     output_mrc: Annotated[
         Optional[Path],
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
@@ -49,6 +53,10 @@ def main(
         float,
         typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='De-curtaining options')
     ] = 5000.0,
+    angular_width: Annotated[
+        float,
+        typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
+    ] = 8.0,
     notch_frac: Annotated[
         float,
         typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
@@ -134,12 +142,14 @@ def main(
             print(f'Processing tilt {i+1}/{data.shape[0]}')
         cleared, masks = lisc_clear_frame(
             frame,
+            decurtaining_mode=mode,
             pixel_size_nm=pixel_size,
             curtain_angle=curtain_angle,
             filter_threshold_nm=filter_threshold,
             contaminant_multiplier=con_mult,
             vacuum_multiplier=vac_mult,
             dilate_iterations=dilate_iter,
+            angular_width_deg=angular_width,
             destripe_notch_fraction=notch_frac,
             dc_protect_frac=dc_protect_frac,
             clear_vacuum=clear_vacuum,
