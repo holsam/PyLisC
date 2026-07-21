@@ -35,7 +35,7 @@ def main(
     ],
     output_mrc: Annotated[
         Optional[Path],
-        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC_[mode] suffix)', exists=False)
+        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _PyLisC_[mode] suffix)', exists=False)
     ] = None,
     pixel_size: Annotated[
         Optional[float],
