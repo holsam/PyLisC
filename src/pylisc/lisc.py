@@ -13,12 +13,14 @@ from pylisc.mask import compute_masks
 
 def lisc_clear_frame(
     frame: np.ndarray,
+    decurtaining_mode: str,
     pixel_size_nm: float,
     curtain_angle: float = 0.0,
     filter_threshold_nm: float = 5000.0,
     contaminant_multiplier: float = 1.5,
     vacuum_multiplier: float = 1.5,
     dilate_iterations: int = 4,
+    angular_width_deg: float = 8.0,
     destripe_notch_fraction: float = 0.02,
     dc_protect_frac: float = 0.01,
     clear_vacuum: bool = False,
@@ -63,6 +65,9 @@ def lisc_clear_frame(
         cleared = np.where(excluded, local_neutral, hp)
 
     # Remove curtaining artefacts in Fourier space, at the given angle
-    cleared = directional_destripe(cleared, notch_frac=destripe_notch_fraction, angle_deg=curtain_angle, dc_protect_frac=dc_protect_frac)
+    if decurtaining_mode == 'angular':
+        cleared = directional_destripe_angular(cleared, angle_deg=curtain_angle, angular_width_deg=angular_width_deg)
+    elif decurtaining_mode == 'linear':
+        cleared = directional_destripe_linear(cleared, notch_frac=destripe_notch_fraction, angle_deg=curtain_angle, dc_protect_frac=dc_protect_frac)
 
     return cleared.astype(np.float32), masks
