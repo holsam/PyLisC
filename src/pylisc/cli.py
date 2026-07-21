@@ -4,7 +4,7 @@ PyLisC: command-line entry point
 
 # Import external libraries
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 try:
     import matplotlib, mrcfile, numpy as np, tifffile, typer
