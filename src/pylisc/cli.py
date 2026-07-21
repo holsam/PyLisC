@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 try:
-    import matplotlib, mrcfile, numpy, tifffile, typer
+    import matplotlib, mrcfile, numpy as np, tifffile, typer
 except ImportError as e:
     raise ImportError('PyLisC requirements not met. Please see README for information.') from e
 
