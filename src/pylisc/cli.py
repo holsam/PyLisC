@@ -125,7 +125,7 @@ def main(
         print(f'Output file: {output_mrc}')
         print(f'Voxel size: {voxel_size}')
         print(f'Pixel size: {pixel_size}')
-        print(f'{"Estimated c" if angular_energy is not None else "C"}urtaining angle: {curtain_angle}{f"°; confidence: {angular_energy.max/np.median(angular_energy)}" if angular_energy is not None else "°"}')
+        print(f'{"Estimated c" if angular_energy is not None else "C"}urtaining angle: {curtain_angle}{f"°; confidence: {angular_energy.max()/np.median(angular_energy)}" if angular_energy is not None else "°"}')
         print()
 
     # Apply LisC to each frame
