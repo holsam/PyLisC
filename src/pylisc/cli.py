@@ -88,7 +88,7 @@ def main(
 ):
     # Set output file path if none provided
     if output_mrc is None:
-        output_mrc = f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc'
+        output_mrc = Path(f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc')
 
     # Read data from input_mrc
     with mrcfile.open(input_mrc, permissive=True) as mrc:
