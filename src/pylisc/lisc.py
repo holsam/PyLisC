@@ -8,7 +8,7 @@ from scipy import ndimage as ndi
 
 # Import internal PyLisC libraries
 from pylisc.blur import bandpass_highpass
-from pylisc.destripe import directional_destripe
+from pylisc.destripe import directional_destripe_angular, directional_destripe_linear
 from pylisc.mask import compute_masks
 
 def lisc_clear_frame(
