@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 try:
-    import matplotlib, mrcfile, numpy, tifffile, typer
+    import matplotlib, mrcfile, numpy as np, tifffile, typer
 except ImportError as e:
     raise ImportError('PyLisC requirements not met. Please see README for information.') from e
 
@@ -88,7 +88,7 @@ def main(
 ):
     # Set output file path if none provided
     if output_mrc is None:
-        output_mrc = f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc'
+        output_mrc = Path(f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc')
 
     # Read data from input_mrc
     with mrcfile.open(input_mrc, permissive=True) as mrc:
@@ -125,7 +125,7 @@ def main(
         print(f'Output file: {output_mrc}')
         print(f'Voxel size: {voxel_size}')
         print(f'Pixel size: {pixel_size}')
-        print(f'{"Estimated c" if angular_energy is not None else "C"}urtaining angle: {curtain_angle}{f"°; confidence: {angular_energy.max/np.median(angular_energy)}" if angular_energy is not None else "°"}')
+        print(f'{"Estimated c" if angular_energy is not None else "C"}urtaining angle: {curtain_angle}{f"°; confidence: {angular_energy.max()/np.median(angular_energy)}" if angular_energy is not None else "°"}')
         print()
 
     # Apply LisC to each frame
@@ -134,23 +134,23 @@ def main(
             print(f'Processing tilt {i+1}/{data.shape[0]}')
         cleared, masks = lisc_clear_frame(
             frame,
-            pixel_size_nm=pixel_size_nm,
-            filter_thr_nm=args.filter_threshold_nm,
-            contam_mult=args.contam_mult,
-            vacuum_mult=args.vacuum_mult,
-            dilate_iter=args.dilate_iter,
-            destripe_notch_frac=args.destripe_notch_frac,
-            curtain_angle_deg=args.curtain_angle,
-            dc_protect_frac=args.dc_protect_frac,
-            clear_vacuum=args.clear_vacuum,
-            clear_contamination=args.clear_contamination,
-            fill_sigma_nm=args.fill_sigma_nm,
+            pixel_size_nm=pixel_size,
+            curtain_angle=curtain_angle,
+            filter_threshold_nm=filter_threshold,
+            contaminant_multiplier=con_mult,
+            vacuum_multiplier=vac_mult,
+            dilate_iterations=dilate_iter,
+            destripe_notch_fraction=notch_frac,
+            dc_protect_frac=dc_protect_frac,
+            clear_vacuum=clear_vacuum,
+            clear_contamination=clear_contamination,
+            fill_sigma_nm=fill_sigma,
         )
         cleared_stack[i] = cleared
-        if args.save_masks:
+        if save_masks:
             for name, region in masks.items():
                 stem = name.replace("_mask", "")
-                tifffile.imwrite(args.save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
+                tifffile.imwrite(save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
         print(f'Processed tilt {i+1}/{data.shape[0]}')
 
     # Save output MRC
