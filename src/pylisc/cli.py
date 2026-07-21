@@ -134,23 +134,23 @@ def main(
             print(f'Processing tilt {i+1}/{data.shape[0]}')
         cleared, masks = lisc_clear_frame(
             frame,
-            pixel_size_nm=pixel_size_nm,
-            filter_thr_nm=args.filter_threshold_nm,
-            contam_mult=args.contam_mult,
-            vacuum_mult=args.vacuum_mult,
-            dilate_iter=args.dilate_iter,
-            destripe_notch_frac=args.destripe_notch_frac,
-            curtain_angle_deg=args.curtain_angle,
-            dc_protect_frac=args.dc_protect_frac,
-            clear_vacuum=args.clear_vacuum,
-            clear_contamination=args.clear_contamination,
-            fill_sigma_nm=args.fill_sigma_nm,
+            pixel_size_nm=pixel_size,
+            filter_thr_nm=filter_threshold,
+            contam_mult=con_mult,
+            vacuum_mult=vac_mult,
+            dilate_iter=dilate_iter,
+            destripe_notch_frac=notch_frac,
+            curtain_angle_deg=curtain_angle,
+            dc_protect_frac=dc_protect_frac,
+            clear_vacuum=clear_vacuum,
+            clear_contamination=clear_contamination,
+            fill_sigma_nm=fill_sigma,
         )
         cleared_stack[i] = cleared
-        if args.save_masks:
+        if save_masks:
             for name, region in masks.items():
                 stem = name.replace("_mask", "")
-                tifffile.imwrite(args.save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
+                tifffile.imwrite(save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
         print(f'Processed tilt {i+1}/{data.shape[0]}')
 
     # Save output MRC
