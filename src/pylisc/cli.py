@@ -35,7 +35,7 @@ def main(
     ],
     output_mrc: Annotated[
         Optional[Path],
-        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
+        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC_[mode] suffix)', exists=False)
     ] = None,
     pixel_size: Annotated[
         Optional[float],
@@ -96,7 +96,14 @@ def main(
 ):
     # Set output file path if none provided
     if output_mrc is None:
-        output_mrc = Path(f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc')
+        output_mrc = Path(f'{input_mrc.parents[0]}/{input_mrc.stem}_PyLisC_{mode}.mrc')
+        if output_mrc.exists():
+            counter = 1
+            while True:
+                output_mrc = Path(f'{output_mrc.stem}_{counter}.mrc')
+                if not output_mrc.exists():
+                    break
+                counter += 1
 
     # Read data from input_mrc
     with mrcfile.open(input_mrc, permissive=True) as mrc:
