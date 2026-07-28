@@ -4,7 +4,7 @@ PyLisC: command-line entry point
 
 # Import external libraries
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 try:
     import matplotlib, mrcfile, numpy as np, tifffile, typer
@@ -29,9 +29,13 @@ def main(
         Path,
         typer.Argument(help='MRC file to apply LisC algorithm to')
     ],
+    mode: Annotated[
+        Literal['angular', 'linear'],
+        typer.Option('-m', '--mode', help='Method of de-curtaining to use (angular or linear)', rich_help_panel='De-curtaining options')
+    ],
     output_mrc: Annotated[
         Optional[Path],
-        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _LisC suffix)')
+        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _PyLisC_[mode] suffix)', exists=False)
     ] = None,
     pixel_size: Annotated[
         Optional[float],
@@ -49,6 +53,10 @@ def main(
         float,
         typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='De-curtaining options')
     ] = 5000.0,
+    angular_width: Annotated[
+        float,
+        typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
+    ] = 8.0,
     notch_frac: Annotated[
         float,
         typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
@@ -88,7 +96,15 @@ def main(
 ):
     # Set output file path if none provided
     if output_mrc is None:
-        output_mrc = Path(f'{input_mrc.parents[0]}/{input_mrc.stem}_LisC.mrc')
+            base_stem = f'{input_mrc.stem}_PyLisC_{mode}'
+            output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}.mrc')
+            if output_mrc.exists():
+                counter = 1
+                while True:
+                    output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}_{counter}.mrc')
+                    if not output_mrc.exists():
+                        break
+                    counter += 1
 
     # Read data from input_mrc
     with mrcfile.open(input_mrc, permissive=True) as mrc:
@@ -134,12 +150,14 @@ def main(
             print(f'Processing tilt {i+1}/{data.shape[0]}')
         cleared, masks = lisc_clear_frame(
             frame,
+            decurtaining_mode=mode,
             pixel_size_nm=pixel_size,
             curtain_angle=curtain_angle,
             filter_threshold_nm=filter_threshold,
             contaminant_multiplier=con_mult,
             vacuum_multiplier=vac_mult,
             dilate_iterations=dilate_iter,
+            angular_width_deg=angular_width,
             destripe_notch_fraction=notch_frac,
             dc_protect_frac=dc_protect_frac,
             clear_vacuum=clear_vacuum,
