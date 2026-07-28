@@ -12,6 +12,7 @@ except ImportError as e:
     raise ImportError('PyLisC requirements not met. Please see README for information.') from e
 
 # Import internal PyLisC modules
+from pylisc.batch import run_batch
 from pylisc.estimate_angle import estimate_curtain_angle, plot_angular_energy
 from pylisc.lisc import lisc_clear_frame
 
@@ -25,7 +26,7 @@ pylisc = typer.Typer(
 # Define command for pylisc
 @pylisc.command()
 def main(
-    input_mrc: Annotated[
+    input_path: Annotated[
         Path,
         typer.Argument(help='MRC file to apply LisC algorithm to')
     ],
@@ -35,7 +36,11 @@ def main(
     ],
     output_mrc: Annotated[
         Optional[Path],
-        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _PyLisC_[mode] suffix)', exists=False)
+        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_path with _PyLisC_[mode] suffix)', exists=False)
+    ] = None,
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory)')
     ] = None,
     verbose: Annotated[
         bool,
@@ -69,21 +74,47 @@ def main(
         float,
         typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping', rich_help_panel='De-curtaining options')
     ] = 0.01,
+    angle_outlier_threshold: Annotated[
+        float,
+        typer.Option('--angle-outlier-threshold', help='Warn if an individual series\' own angle estimate differs from the batch consensus by more than this many degrees.', rich_help_panel='Batch options')
+    ] = 5.0,
 ):
+    # Branch on single file vs directory
+    if input_path.is_dir():
+        if output_dir is None:
+            raise typer.BadParameter('--output-dir is required when input_path is a directory')
+        if output_mrc is not None:
+            print(f'Ignoring output filename: {output_mrc}')
+        run_batch(
+            input_dir=input_path,
+            output_dir=output_dir,
+            verbose=verbose,
+            mode=mode,
+            filter_threshold=filter_threshold,
+            pixel_size=pixel_size, 
+            curtain_angle=curtain_angle,
+            reference_frame=reference_frame,
+            angular_width=angular_width,
+            notch_frac=notch_frac,
+            dc_protect_frac=dc_protect_frac,
+            angle_outlier_threshold=angle_outlier_threshold,
+        )
+        raise typer.Exit()
+
     # Set output file path if none provided
     if output_mrc is None:
-            base_stem = f'{input_mrc.stem}_PyLisC_{mode}'
-            output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}.mrc')
+            base_stem = f'{input_path.stem}_PyLisC_{mode}'
+            output_mrc = Path(f'{input_path.parents[0]}/{base_stem}.mrc')
             if output_mrc.exists():
                 counter = 1
                 while True:
-                    output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}_{counter}.mrc')
+                    output_mrc = Path(f'{input_path.parents[0]}/{base_stem}_{counter}.mrc')
                     if not output_mrc.exists():
                         break
                     counter += 1
 
-    # Read data from input_mrc
-    with mrcfile.open(input_mrc, permissive=True) as mrc:
+    # Read data from input_path
+    with mrcfile.open(input_path, permissive=True) as mrc:
         data = mrc.data.astype(np.float32)
         voxel_size = mrc.voxel_size # in Ångstroms
     if data.ndim == 2:
@@ -112,7 +143,7 @@ def main(
     # Output processing information if verbose
     if verbose:
         print()
-        print(f'Input file: {input_mrc}')
+        print(f'Input file: {input_path}')
         print(f'Output file: {output_mrc}')
         print(f'Voxel size: {voxel_size}')
         print(f'Pixel size: {pixel_size}')
