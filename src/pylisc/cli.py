@@ -50,9 +50,9 @@ def main(
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)', rich_help_panel='De-curtaining options')
     ] = None,
     reference_frame: Annotated[
-        int,
-        typer.Option('--reference-frame', help='Stack index used for angle estimation and the destriping preview', rich_help_panel='De-curtaining options')
-    ] = 0,
+        Optional[int],
+        typer.Option('--reference-frame', help='Stack index used for angle estimation and the destriping preview', rich_help_panel='De-curtaining options', min=0)
+    ] = None,
     angular_width: Annotated[
         float,
         typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
@@ -91,13 +91,16 @@ def main(
     if pixel_size <= 0:
         raise ValueError('Pixel size cannot be less than or equal to 0')
 
+    # Resolve reference frame (use mid-frame as should be ok for both dose-symmetric & continuous acquisitions)
+    if reference_frame is None:
+        reference_frame = len(data) // 2
+
     # Create placeholder for cleared frames
     cleared_stack = np.empty_like(data, dtype=np.float32)
 
     # Estimate curtaining angle
     if curtain_angle is None:
-        mid_frame = len(data) // 2
-        curtain_angle, angular_energy = estimate_curtain_angle(data[mid_frame])
+        curtain_angle, angular_energy = estimate_curtain_angle(data[reference_frame])
         plot_angular_energy(angular_energy, curtain_angle, output_dir=output_mrc.parent)
     else:
         angular_energy = None
