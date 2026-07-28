@@ -53,21 +53,31 @@ Curtaining removal works by finding curtaining's signature in Fourier space and 
 
 ### Options
 
-#### General
+#### Filtering options
 Option | Default | Description
 --|--|--
+`--filter-threshold` | `5000.0` | High-pass cutoff, in nm. Large-scale structure below this frequency is removed before destriping.
 `--pixel-size` | *(read from MRC header)* | Override the pixel size, in nm. Use this if the header value is missing or unreliable.
-`-v`, `--verbose` | `False` | Print per-tilt progress and parameter summary.
 
 #### De-curtaining options
 Option | Default | Description
 --|--|--
 `-m`, `--mode` | *(required)* | Destriping approach: `angular` (recommended) or `linear` (legacy). See [Destriping mode](#destriping-mode) above.
 `--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
-`--filter-threshold` | `5000.0` | High-pass cutoff, in nm. Large-scale structure below this frequency is removed before destriping.
+`--reference-frame` | `0` | Stack index used for angle estimation and the destriping preview. See [Choosing a reference frame](#choosing-a-reference-frame) for more information.
 `--angular-width` | `8.0` | Angular width of the destriping notch, in degrees. Only used when `--mode angular`. Narrower keeps more real structure sharing a nearby angle to the curtains, at the cost of weaker curtain removal.
 `--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Only used when `--mode linear`. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
 `--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. Only used when `--mode linear`. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off.
+
+### Choosing a reference frame
+The reference frame should be the tilt with the least foreshortening and the best signal-to-noise, since that gives the most reliable curtain angle estimate and the clearest destriping preview. In practice this is the 0° tilt (or the pretilt used during lamella imaging).
+
+
+- **Dose-symmetric schemes** (0° acquired first, then alternating ±): use `--reference-frame 0`.
+- **Continuous sweeps** (most-negative tilt acquired first): 0° sits in the middle of the stack, so use roughly `--reference-frame <n//2>` for an n-tilt series.
+
+
+By default, the reference frame is taken as the middle of the stack, under the assumption that this will be correct for continous sweeps and workable for dose-symmetric schemes (vs using the first frame which would be correct for dose-symmetric but an extreme tilt angle for continous).
 
 ## Output
 A cleared MRC stack, one processed frame per input tilt, at the same dimensions and pixel size as the input.
