@@ -65,34 +65,6 @@ def main(
         float,
         typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping', rich_help_panel='De-curtaining options')
     ] = 0.01,
-    clear_contamination: Annotated[
-        bool,
-        typer.Option('--clear-contamination', help='Detect dark contamination regions and replace with neutral local mean', rich_help_panel='Mask options')
-    ] = False,
-    clear_vacuum: Annotated[
-        bool,
-        typer.Option('--clear-vacuum', help='Detect bright vacuum regions and replace with neutral local mean', rich_help_panel='Mask options')
-    ] = False,
-    con_mult: Annotated[
-        float,
-        typer.Option('--con-multiplier', help='Contaminant threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    vac_mult: Annotated[
-        float,
-        typer.Option('--vac-multiplier', help='Vacuum threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    fill_sigma: Annotated[
-        Optional[float],
-        typer.Option('--fill-sigma', help='Length scale (nm) for the netural fill for cleared regions', rich_help_panel='Mask options')
-    ] = None,
-    dilate_iter: Annotated[
-        int,
-        typer.Option('--iters', help='Binary dilation iterations for masking', rich_help_panel='Mask options')
-    ] = 4,
-    save_masks: Annotated[
-        Optional[Path],
-        typer.Option('--masks', help='Path to directory to save per-frame vacuum/contamination masks as TIFF images', rich_help_panel='Mask options')
-    ] = None,
 ):
     # Set output file path if none provided
     if output_mrc is None:
@@ -119,10 +91,6 @@ def main(
     if pixel_size <= 0:
         raise ValueError('Pixel size cannot be less than or equal to 0')
 
-    # Create save masks directory if required
-    if save_masks is not None:
-        save_masks.mkdir(parents=True, exist_ok=True)
-
     # Create placeholder for cleared frames
     cleared_stack = np.empty_like(data, dtype=np.float32)
 
@@ -148,27 +116,17 @@ def main(
     for i, frame in enumerate(data):
         if verbose:
             print(f'Processing tilt {i+1}/{data.shape[0]}')
-        cleared, masks = lisc_clear_frame(
+        cleared = lisc_clear_frame(
             frame,
             decurtaining_mode=mode,
             pixel_size_nm=pixel_size,
             curtain_angle=curtain_angle,
             filter_threshold_nm=filter_threshold,
-            contaminant_multiplier=con_mult,
-            vacuum_multiplier=vac_mult,
-            dilate_iterations=dilate_iter,
             angular_width_deg=angular_width,
             destripe_notch_fraction=notch_frac,
             dc_protect_frac=dc_protect_frac,
-            clear_vacuum=clear_vacuum,
-            clear_contamination=clear_contamination,
-            fill_sigma_nm=fill_sigma,
         )
         cleared_stack[i] = cleared
-        if save_masks:
-            for name, region in masks.items():
-                stem = name.replace("_mask", "")
-                tifffile.imwrite(save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
         print(f'Processed tilt {i+1}/{data.shape[0]}')
 
     # Save output MRC
