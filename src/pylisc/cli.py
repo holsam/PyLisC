@@ -37,14 +37,18 @@ def main(
         Optional[Path],
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _PyLisC_[mode] suffix)', exists=False)
     ] = None,
-    pixel_size: Annotated[
-        Optional[float],
-        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header')
-    ] = None,
     verbose: Annotated[
         bool,
         typer.Option('-v', '--verbose', help='Print additional progress messages')
     ] = False,
+    filter_threshold: Annotated[
+        float,
+        typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='Filtering options',)
+    ] = 5000.0,
+    pixel_size: Annotated[
+        Optional[float],
+        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header', rich_help_panel='Filtering options')
+    ] = None,
     curtain_angle: Annotated[
         Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)', rich_help_panel='De-curtaining options')
