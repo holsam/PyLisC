@@ -49,10 +49,10 @@ def main(
         Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)', rich_help_panel='De-curtaining options')
     ] = None,
-    filter_threshold: Annotated[
-        float,
-        typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='De-curtaining options')
-    ] = 5000.0,
+    reference_frame: Annotated[
+        int,
+        typer.Option('--reference-frame', help='Stack index used for angle estimation and the destriping preview', rich_help_panel='De-curtaining options')
+    ] = 0,
     angular_width: Annotated[
         float,
         typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
