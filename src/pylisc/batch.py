@@ -3,7 +3,12 @@ PyLisC: batch processing and directory-wide curtain angle consensus
 '''
 
 # Import external libraries
-import numpy as np
+import numpy as np, mrcfile
+
+# Import internal PyLisC modules
+from pylisc.estimate_angle import estimate_curtain_angle
+from pylisc.lisc import lisc_clear_frame
+from pylisc.io import nameOutputFile
 
 
 def combine_angles(angles_deg: list, confidences: list) -> tuple:
@@ -52,7 +57,12 @@ def run_batch(
         angles, confidences, per_series_energy = [], [], []
         for path in series_paths:
             with mrcfile.open(path, permissive=True) as mrc:
-                frame = mrc.data[reference_frame].astype(np.float32) if mrc.data.ndim == 3 else mrc.data.astype(np.float32)
+                data =  mrc.data.astype(np.float32)
+            if data.ndim == 2:
+                data = data[np.newaxis, ...]
+            if reference_frame is None:
+                reference_frame = len(data) // 2
+            frame = data[reference_frame]
             angle, energy = estimate_curtain_angle(frame)
             confidence = energy.max() / np.median(energy)
             angles.append(angle); confidences.append(confidence); per_series_energy.append(energy)
@@ -64,8 +74,7 @@ def run_batch(
         for path, angle in zip(series_paths, angles):
             deviation = min(abs(angle - consensus_angle), 180 - abs(angle - consensus_angle))
             if deviation > angle_outlier_threshold:
-                print(f'WARNING: {path.name} angle ({angle:.1f} deg) deviates {deviation:.1f} deg '
-                      f'from consensus ({consensus_angle:.1f} deg) -- check its diagnostic plot')
+                print(f'WARNING: {path.name} angle ({angle:.1f} deg) deviates {deviation:.1f} deg from consensus ({consensus_angle:.1f} deg) -- check its diagnostic plot')
 
         curtain_angle = consensus_angle
 
@@ -73,8 +82,7 @@ def run_batch(
         relative = path.relative_to(input_dir)
         out_path = output_dir / relative.parent / f'{path.stem}_PyLisC_{mode}.mrc'
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        # ... run the existing single-series clearing loop against `path` -> `out_path`,
-        #     with curtain_angle fixed to the consensus (no per-series re-estimation)
+
         # Read data from path
         with mrcfile.open(path, permissive=True) as mrc:
             data = mrc.data.astype(np.float32)
@@ -113,6 +121,6 @@ def run_batch(
             print(f'Processed tilt {i+1}/{data.shape[0]}')
 
         # Save output MRC
-        with mrcfile.new(output_mrc, overwrite=True) as out:
+        with mrcfile.new(out_path, overwrite=True) as out:
             out.set_data(cleared_stack.astype(np.float32))
             out.voxel_size = voxel_size
