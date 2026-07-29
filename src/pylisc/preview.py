@@ -3,6 +3,12 @@ PyLisC: generate a preview of different strengths against a single frame
 '''
 
 # Import external libraries
+from pathlib import Path
+
+# Import internal PyLisC modules
+from pylisc.estimate_angle import estimate_curtain_angle
+from pylisc.lisc import lisc_clear_frame
+
 
 def generate_strength_preview(
     reference_frame,
