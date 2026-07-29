@@ -29,28 +29,6 @@ pylisc --mode {angular,linear} [OPTIONS] INPUT_MRC [OUTPUT_MRC]
 
 `OUTPUT_MRC` is optional. If omitted, it defaults to `INPUT_MRC` with a `_PyLisC_{mode}` suffix, saved to the same directory as `INPUT_MRC`. If that file already exists, a numeric suffix is appended instead of overwriting it.
 
-### Example
-```sh
-# Run PyLisC with the recommended angular mode, estimating the curtaining angle automatically
-pylisc --mode angular tilt_series.mrc
-
-# Manually define the curtaining angle
-pylisc --mode angular --angle 50 tilt_series.mrc
-
-# Manually define the pixel size (instead of reading from MRC header)
-pylisc --mode angular --pixel-size 4.4 tilt_series.mrc
-
-# Use the linear notch mode instead
-pylisc --mode linear tilt_series.mrc
-```
-
-### Destriping mode
-
-Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the required `--mode`/`-m` flag:
-
-- **`angular` (recommended).** Dims frequencies by their *direction*, regardless of how close they are to the zero-frequency origin. This keeps large-scale contrast and fine detail intact at every radius, so curtain removal strength does not affect signal preservation. Only structures genuinely running at the same angle as the curtains are affected, since they share the Fourier signature.
-- **`linear`.** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
-
 ### Options
 
 #### Filtering options
@@ -74,6 +52,37 @@ Option | Default | Description
 --|--|--
 `--output-dir` | *(required for directory input)* | Output directory for batch mode, mirroring the input directory's structure.
 `--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees.
+
+### Example
+```sh
+# Run PyLisC with the recommended angular mode, estimating the curtaining angle automatically
+pylisc --mode angular tilt_series.mrc
+
+# Manually define the curtaining angle
+pylisc --mode angular --angle 50 tilt_series.mrc
+
+# Manually define the pixel size (instead of reading from MRC header)
+pylisc --mode angular --pixel-size 4.4 tilt_series.mrc
+
+# Use the linear notch mode instead
+pylisc --mode linear tilt_series.mrc
+```
+
+### Destriping mode
+
+Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the required `--mode`/`-m` flag:
+
+- **`angular` (recommended).** Dims frequencies by their *direction*, regardless of how close they are to the zero-frequency origin. This keeps large-scale contrast and fine detail intact at every radius, so curtain removal strength does not affect signal preservation. Only structures genuinely running at the same angle as the curtains are affected, since they share the Fourier signature.
+- **`linear`.** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
+
+### Previewing destriping strength
+Before committing to a full run, different strength values can be previewed against on a single frame:
+
+```sh
+pylisc --mode angular --preview-strengths 3,5,8,12,20 tilt_series.mrc
+```
+
+This saves `destripe_strength_preview.tiff`, a side-by-side montage labelled with each value, and exits without processing the rest of the stack. Uses `--reference-frame` (see [below](#choosing-a-reference-frame)) as the preview frame.
 
 ### Choosing a reference frame
 The reference frame should be the tilt with the least foreshortening and the best signal-to-noise, since that gives the most reliable curtain angle estimate and the clearest destriping preview. In practice this is the 0° tilt (or the pretilt used during lamella imaging).
