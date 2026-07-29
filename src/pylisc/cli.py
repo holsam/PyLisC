@@ -15,6 +15,7 @@ except ImportError as e:
 from pylisc.batch import run_batch
 from pylisc.estimate_angle import estimate_curtain_angle, plot_angular_energy
 from pylisc.lisc import lisc_clear_frame
+from pylisc.preview import generate_strength_preview
 
 # Set up Typer class
 pylisc = typer.Typer(
