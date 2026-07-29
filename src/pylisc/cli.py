@@ -66,6 +66,10 @@ def main(
         float,
         typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
     ] = 8.0,
+    preview_strengths: Annotated[
+        Optional[str],
+        typer.Option('--preview-strengths', help='Comma-separated values to preview before committing to a full run (angular width in degrees for --mode angular, notch fraction for --mode linear)', rich_help_panel='De-curtaining options')
+    ] = None,
     notch_frac: Annotated[
         float,
         typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
@@ -139,6 +143,22 @@ def main(
         plot_angular_energy(angular_energy, curtain_angle, output_dir=output_mrc.parent)
     else:
         angular_energy = None
+
+    if preview_strengths is not None:
+        values = [float(v) for v in preview_strengths.split(',')]
+        preview_path = generate_strength_preview(
+            data[reference_frame],
+            mode=mode,
+            pixel_size_nm = pixel_size,
+            values=values,
+            curtain_angle=curtain_angle,
+            filter_threshold_nm=filter_threshold,
+            dc_protect_frac=dc_protect_frac,
+            notch_frac=notch_frac,
+            output_dir=output_mrc.parent,
+        )
+        print(f'Strength preview saved to {preview_path}')
+        raise typer.Exit()
 
     # Output processing information if verbose
     if verbose:
