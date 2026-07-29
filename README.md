@@ -69,15 +69,44 @@ Option | Default | Description
 `--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Only used when `--mode linear`. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
 `--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. Only used when `--mode linear`. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off.
 
+#### Batch options
+Option | Default | Description
+--|--|--
+`--output-dir` | *(required for directory input)* | Output directory for batch mode, mirroring the input directory's structure.
+`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees.
+
 ### Choosing a reference frame
 The reference frame should be the tilt with the least foreshortening and the best signal-to-noise, since that gives the most reliable curtain angle estimate and the clearest destriping preview. In practice this is the 0° tilt (or the pretilt used during lamella imaging).
-
 
 - **Dose-symmetric schemes** (0° acquired first, then alternating ±): use `--reference-frame 0`.
 - **Continuous sweeps** (most-negative tilt acquired first): 0° sits in the middle of the stack, so use roughly `--reference-frame <n//2>` for an n-tilt series.
 
-
 By default, the reference frame is taken as the middle of the stack, under the assumption that this will be correct for continous sweeps and workable for dose-symmetric schemes (vs using the first frame which would be correct for dose-symmetric but an extreme tilt angle for continous).
+
+## Batch mode
+
+`INPUT_PATH` can be a directory instead of a single MRC. When it is, PyLisC processes every tilt series it finds, and `--output-dir` (required in this mode) receives the cleared output, mirroring the input directory's structure.
+
+```sh
+pylisc raw_tilt_series/ --mode angular --output-dir cleared_tilt_series/
+```
+
+Files already carrying a `_PyLisC_` suffix (i.e. previous PyLisC output) are skipped, so re-running against the same directory won't reprocess its own results.
+
+### Shared curtain angle
+Unless `--angle` is given explicitly, single-file mode estimates the curtaining angle from one frame. In batch mode, PyLisC instead estimates an angle **per series** and combines them into a single shared angle, which is then applied to every series in the batch rather than letting each one drift independently.
+
+The combination is a confidence-weighted circular mean: each series' angle is weighted by its own confidence ratio (see [Curtain angle diagnostic plot](#curtain-angle-diagnostic-plot) below), so a series with a clear, sharp peak counts for more than one with a flat, uncertain profile.
+
+### Outlier detection
+
+If any individual series' own angle estimate differs from the batch consensus by more than `--angle-outlier-threshold` (default `5.0` degrees), a warning is printed naming that series:
+
+```
+WARNING: sample_07.mrc angle (58.3 deg) deviates 41.2 deg from consensus (17.1 deg) -- check its diagnostic plot
+```
+
+This is exactly the mild-curtaining-plus-competing-linear-features case: a warning doesn't mean that series was excluded or handled differently, only that its own estimate didn't match the rest of the session and is worth a manual look via its per-series diagnostic plot before trusting the batch result for that particular series.
 
 ## Output
 A cleared MRC stack, one processed frame per input tilt, at the same dimensions and pixel size as the input.
