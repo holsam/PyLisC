@@ -40,7 +40,7 @@ def main(
     ] = None,
     output_dir: Annotated[
         Optional[Path],
-        typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory)')
+        typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory)', rich_help_panel='Batch options')
     ] = None,
     verbose: Annotated[
         bool,
