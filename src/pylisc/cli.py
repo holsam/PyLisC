@@ -53,7 +53,7 @@ def main(
     ] = 5000.0,
     pixel_size: Annotated[
         Optional[float],
-        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header', rich_help_panel='Filtering options')
+        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header', rich_help_panel='Filtering options', min=0)
     ] = None,
     curtain_angle: Annotated[
         Optional[float],
@@ -119,11 +119,7 @@ def main(
                     counter += 1
 
     # Read data from input_path
-    with mrcfile.open(input_path, permissive=True) as mrc:
-        data = mrc.data.astype(np.float32)
-        voxel_size = mrc.voxel_size # in Ångstroms
-    if data.ndim == 2:
-        data = data[np.newaxis, ...]
+    data, voxel_size = io.readMrcFile(input_path)
 
     # Resolve pixel size
     if pixel_size is None:
