@@ -6,34 +6,9 @@ PyLisC: batch processing and directory-wide curtain angle consensus
 import numpy as np, mrcfile
 
 # Import internal PyLisC modules
-from pylisc.estimate_angle import estimate_curtain_angle
+from pylisc.estimate_angle import combine_angles, estimate_curtain_angle
 from pylisc.lisc import lisc_clear_frame
-from pylisc.io import nameOutputFile
-
-
-def combine_angles(angles_deg: list, confidences: list) -> tuple:
-    '''
-    Confidence-weighted circular mean of curtain angles
-    '''
-    angles = np.asarray(angles_deg, dtype=float)
-    conf = np.asarray(confidences, dtype=float)
-    doubled = np.deg2rad(angles * 2)
-    x = np.sum(conf * np.cos(doubled))
-    y = np.sum(conf * np.sin(doubled))
-    consensus = np.degrees(np.arctan2(y, x)) / 2
-    consensus = ((consensus + 90) % 180) - 90  # wrap to (-90, 90]
-    agreement = np.sqrt(x ** 2 + y ** 2) / conf.sum()
-    return float(consensus), float(agreement)
-
-
-def find_tilt_series(input_dir, pattern: str = '*.mrc'):
-    '''
-    Recursively find tilt series MRCs under input_dir, excluding PyLisC's own output
-    '''
-    return sorted(
-        p for p in input_dir.rglob(pattern)
-        if '_PyLisC_' not in p.stem
-    )
+from pylisc.io import find_tilt_series, nameOutputFile, readMrcFile, writeMrcFile
 
 def run_batch(
     input_dir,
@@ -84,12 +59,8 @@ def run_batch(
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Read data from path
-        with mrcfile.open(path, permissive=True) as mrc:
-            data = mrc.data.astype(np.float32)
-            voxel_size = mrc.voxel_size # in Ångstroms
-        if data.ndim == 2:
-            data = data[np.newaxis, ...]
-        
+        data, voxel_size = readMrcFile(path)
+
         # Resolve pixel size
         if pixel_size is None:
             pixel_size = float(voxel_size.x) / 10.0
@@ -121,6 +92,4 @@ def run_batch(
             print(f'Processed tilt {i+1}/{data.shape[0]}')
 
         # Save output MRC
-        with mrcfile.new(out_path, overwrite=True) as out:
-            out.set_data(cleared_stack.astype(np.float32))
-            out.voxel_size = voxel_size
+        writeMrcFile(cleared_stack, voxel_size, out_path)
