@@ -22,4 +22,4 @@ def configure_logger(batch_mode, input_path, output_mrc, output_dir, verbosity):
     logger.add(log_path, format=LOG_FORMAT, level='DEBUG')    # add file logger (always DEBUG)
 
     # Logging confirmation
-    logger.debug('logging set up: stderr ({}) and {} ({})', log_level, log_path, 'DEBUG')
+    logger.debug('logging configured: stderr ({}) and {} ({})', log_level, log_path, 'DEBUG')
