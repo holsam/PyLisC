@@ -13,6 +13,7 @@ except ImportError as e:
 
 # Import internal PyLisC modules
 from pylisc.batch import run_batch
+from pylisc.log import configure_logger, logger
 from pylisc.single import run_single
 
 # Set up Typer class
@@ -41,10 +42,10 @@ def main(
         Optional[Path],
         typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory)', rich_help_panel='Batch options')
     ] = None,
-    verbose: Annotated[
-        bool,
-        typer.Option('-v', '--verbose', help='Print additional progress messages')
-    ] = False,
+    verbosity: Annotated[
+        int,
+        typer.Option('-v', '--verbose', count=True, help='Print additional progress messages')
+    ] = 0,
     filter_threshold: Annotated[
         float,
         typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='Filtering options',)
@@ -95,13 +96,17 @@ def main(
         if output_dir is not None:
             print(f'Ignoring option: --output-dir {output_dir}')
         batch = False
+    verbosity = 2 if verbosity >= 2 else verbosity
+
+    # Set up logging
+    configure_logger(batch, input_path, output_mrc, output_dir, verbosity)
+    logger.debug('running pylisc with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
 
     # Branch on batch vs single processing
     if batch:
         run_batch(
             input_dir=input_path,
             output_dir=output_dir,
-            verbose=verbose,
             mode=mode,
             filter_threshold=filter_threshold,
             pixel_size=pixel_size, 
@@ -116,7 +121,6 @@ def main(
         run_single(
             input_path=input_path,
             output_mrc=output_mrc,
-            verbose=verbose,
             mode=mode,
             filter_threshold=filter_threshold,
             pixel_size=pixel_size, 
@@ -127,5 +131,5 @@ def main(
             dc_protect_frac=dc_protect_frac,
             preview_strengths=preview_strengths,
         )
-
+    logger.info('pylisc completed')
     raise typer.Exit()
