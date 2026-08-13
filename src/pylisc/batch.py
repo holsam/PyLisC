@@ -39,15 +39,15 @@ def run_batch(
             angle, energy = estimate_curtain_angle(frame)
             confidence = energy.max() / np.median(energy)
             angles.append(angle); confidences.append(confidence); per_series_energy.append(energy)
-            log.debug('({}) est. angle: {} (conf.: {})', path.name, angle, confidence)
+            logger.debug('({}) est. angle: {} (conf.: {})', path.name, angle, confidence)
 
         consensus_angle, agreement = combine_angles(angles, confidences)
-        log.info('batch consensus angle: {}° (agreement: {})', '{consensus_angle:.1f}', '{agreement:.3f}')
+        logger.info('batch consensus angle: {}° (agreement: {})', '{consensus_angle:.1f}', '{agreement:.3f}')
 
         for path, angle in zip(series_paths, angles):
             deviation = min(abs(angle - consensus_angle), 180 - abs(angle - consensus_angle))
             if deviation > angle_outlier_threshold:
-                log.warning('({}) est. angle ({}°) deviates {}° from consensus ({}°) - check diagnostic plot', path.name, '{angle:.1f}', '{deviation:.1f}', '{consensus_angle:.1f}')
+                logger.warning('({}) est. angle ({}°) deviates {}° from consensus ({}°) - check diagnostic plot', path.name, '{angle:.1f}', '{deviation:.1f}', '{consensus_angle:.1f}')
 
         curtain_angle = consensus_angle
 
@@ -90,5 +90,5 @@ def run_batch(
 
         # Save output MRC
         writeMrcFile(cleared_stack, voxel_size, out_path)
-        log.debug('({}) cleared mrc file wrote to {}', path.name, output_mrc)
-    log.info('cleared mrc files written to {}', output_dir)
+        logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
+    logger.info('cleared mrc files written to {}', output_dir)

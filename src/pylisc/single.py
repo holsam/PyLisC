@@ -68,7 +68,7 @@ def run_single(
 
     if preview_strengths is not None:
         values = [float(v) for v in preview_strengths.split(',')]
-        log.info('previewing {} destriping strength(s)', len(values))
+        logger.info('previewing {} destriping strength(s)', len(values))
         preview_path = generate_strength_preview(
             data[reference_frame],
             mode=mode,
@@ -100,4 +100,4 @@ def run_single(
 
     # Save output MRC
     writeMrcFile(cleared_stack, voxel_size, output_mrc)
-    log.debug('cleared mrc file wrote to {}', output_mrc)
+    logger.debug('cleared mrc file wrote to {}', output_mrc)
