@@ -23,10 +23,8 @@ pylisc --help
 
 ## Usage
 ```sh
-pylisc --mode {angular,linear} [OPTIONS] INPUT_MRC [OUTPUT_MRC]
+pylisc [OPTIONS] INPUT_MRC [OUTPUT_MRC]
 ```
-`--mode`/`-m` must be specified. Available modes are: `angular` or `linear` (see [Destriping mode](#destriping-mode) below).
-
 `OUTPUT_MRC` is optional. If omitted, it defaults to `INPUT_MRC` with a `_PyLisC_{mode}` suffix, saved to the same directory as `INPUT_MRC`. If that file already exists, a numeric suffix is appended instead of overwriting it.
 
 ### Options
@@ -40,12 +38,12 @@ Option | Default | Description
 #### De-curtaining options
 Option | Default | Description
 --|--|--
-`-m`, `--mode` | *(required)* | Destriping approach: `angular` (recommended) or `linear` (legacy). See [Destriping mode](#destriping-mode) above.
+`-m`, `--mode` | `angular` | Destriping approach: `angular` (recommended) or `linear` (deprecated). See [Destriping mode](#destriping-mode) above.
 `--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
 `--reference-frame` | `0` | Stack index used for angle estimation and the destriping preview. See [Choosing a reference frame](#choosing-a-reference-frame) for more information.
 `--angular-width` | `8.0` | Angular width of the destriping notch, in degrees. Only used when `--mode angular`. Narrower keeps more real structure sharing a nearby angle to the curtains, at the cost of weaker curtain removal.
-`--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Only used when `--mode linear`. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
-`--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. Only used when `--mode linear`. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off.
+`--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind. Only used when `--mode linear`, which is deprecated.
+`--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off. Only used when `--mode linear`, which is deprecated.
 
 #### Batch options
 Option | Default | Description
@@ -55,31 +53,31 @@ Option | Default | Description
 
 ### Example
 ```sh
-# Run PyLisC with the recommended angular mode, estimating the curtaining angle automatically
-pylisc --mode angular tilt_series.mrc
+# Run PyLisC, estimating the curtaining angle automatically
+pylisc tilt_series.mrc
 
 # Manually define the curtaining angle
-pylisc --mode angular --angle 50 tilt_series.mrc
+pylisc --angle 50 tilt_series.mrc
 
 # Manually define the pixel size (instead of reading from MRC header)
-pylisc --mode angular --pixel-size 4.4 tilt_series.mrc
+pylisc --pixel-size 4.4 tilt_series.mrc
 
-# Use the linear notch mode instead
+# Use the linear notch mode instead (note this will log a warning message)
 pylisc --mode linear tilt_series.mrc
 ```
 
 ### Destriping mode
 
-Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the required `--mode`/`-m` flag:
+Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the `--mode`/`-m` flag:
 
 - **`angular` (recommended).** Dims frequencies by their *direction*, regardless of how close they are to the zero-frequency origin. This keeps large-scale contrast and fine detail intact at every radius, so curtain removal strength does not affect signal preservation. Only structures genuinely running at the same angle as the curtains are affected, since they share the Fourier signature.
-- **`linear`.** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
+- **`linear` (deprecated).** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
 
 ### Previewing destriping strength
 Before committing to a full run, different strength values can be previewed against on a single frame:
 
 ```sh
-pylisc --mode angular --preview-strengths 3,5,8,12,20 tilt_series.mrc
+pylisc --preview-strengths 3,5,8,12,20 tilt_series.mrc
 ```
 
 This saves `destripe_strength_preview.tiff`, a side-by-side montage labelled with each value, and exits without processing the rest of the stack. Uses `--reference-frame` (see [below](#choosing-a-reference-frame)) as the preview frame.
@@ -97,7 +95,7 @@ By default, the reference frame is taken as the middle of the stack, under the a
 `INPUT_PATH` can be a directory instead of a single MRC. When it is, PyLisC processes every tilt series it finds, and `--output-dir` (required in this mode) receives the cleared output, mirroring the input directory's structure.
 
 ```sh
-pylisc raw_tilt_series/ --mode angular --output-dir cleared_tilt_series/
+pylisc raw_tilt_series/ --output-dir cleared_tilt_series/
 ```
 
 Files already carrying a `_PyLisC_` suffix (i.e. previous PyLisC output) are skipped, so re-running against the same directory won't reprocess its own results.
@@ -114,8 +112,6 @@ If any individual series' own angle estimate differs from the batch consensus by
 ```
 WARNING: sample_07.mrc angle (58.3 deg) deviates 41.2 deg from consensus (17.1 deg) -- check its diagnostic plot
 ```
-
-This is exactly the mild-curtaining-plus-competing-linear-features case: a warning doesn't mean that series was excluded or handled differently, only that its own estimate didn't match the rest of the session and is worth a manual look via its per-series diagnostic plot before trusting the batch result for that particular series.
 
 ## Output
 A cleared MRC stack, one processed frame per input tilt, at the same dimensions and pixel size as the input.
