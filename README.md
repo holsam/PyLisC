@@ -3,12 +3,11 @@
 A Python port of the Lamella in-silico Clearing algorithm
 
 ## Overview
-This is a Python implementation of the Lamella in-silico Clearing (LisC) algorithm originally described in [Bauerlein et al., 2021](https://doi.org/10.1101/2021.04.14.437159) and available as an ImageJ Macro [here](https://github.com/FJBauerlein/LisC_Algorithm), which removes curtaining artefacts and contamination/vacuum contrast from cryo-FIB/ET tilt series. For information about the differences between PyLisC and the original LisC macro, see the [PyLisC vs LisC section below](#pylisc-vs-lisc).
+This is a Python implementation of the Lamella in-silico Clearing (LisC) algorithm originally described in [Bauerlein et al., 2021](https://doi.org/10.1101/2021.04.14.437159) and available as an ImageJ Macro [here](https://github.com/FJBauerlein/LisC_Algorithm), which removes curtaining artefacts from cryo-FIB/ET tilt series. For information about the differences between PyLisC and the original LisC macro, see the [PyLisC vs LisC section below](#pylisc-vs-lisc).
 
 Given a low-magnification tilt series MRC, PyLisC:
 1. Removes large-scale brightness modulation with a high-pass filter.
-2. Optionally detects contamination and vacuum regions, and fills them with a local grey-scale average.
-3. Removes directional curtaining stripes at a specified angle in Fourier space.
+2. Removes directional curtaining stripes at a specified angle in Fourier space.
 
 Each tilt image in a stack is processed independently and reassembled into a cleared output MRC.
 
@@ -24,68 +23,98 @@ pylisc --help
 
 ## Usage
 ```sh
-pylisc --mode {angular,linear} [OPTIONS] INPUT_MRC [OUTPUT_MRC]
+pylisc [OPTIONS] INPUT_MRC [OUTPUT_MRC]
 ```
-`--mode`/`-m` must be specified. Available modes are: `angular` or `linear` (see [Destriping mode](#destriping-mode) below).
-
 `OUTPUT_MRC` is optional. If omitted, it defaults to `INPUT_MRC` with a `_PyLisC_{mode}` suffix, saved to the same directory as `INPUT_MRC`. If that file already exists, a numeric suffix is appended instead of overwriting it.
+
+### Options
+
+#### Filtering options
+Option | Default | Description
+--|--|--
+`--filter-threshold` | `5000.0` | High-pass cutoff, in nm. Large-scale structure below this frequency is removed before destriping.
+`--pixel-size` | *(read from MRC header)* | Override the pixel size, in nm. Use this if the header value is missing or unreliable.
+
+#### De-curtaining options
+Option | Default | Description
+--|--|--
+`-m`, `--mode` | `angular` | Destriping approach: `angular` (recommended) or `linear` (deprecated). See [Destriping mode](#destriping-mode) above.
+`--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
+`--reference-frame` | `0` | Stack index used for angle estimation and the destriping preview. See [Choosing a reference frame](#choosing-a-reference-frame) for more information.
+`--angular-width` | `8.0` | Angular width of the destriping notch, in degrees. Only used when `--mode angular`. Narrower keeps more real structure sharing a nearby angle to the curtains, at the cost of weaker curtain removal.
+`--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind. Only used when `--mode linear`, which is deprecated.
+`--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off. Only used when `--mode linear`, which is deprecated.
+
+#### Batch options
+Option | Default | Description
+--|--|--
+`--output-dir` | *(required for directory input)* | Output directory for batch mode, mirroring the input directory's structure.
+`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees.
 
 ### Example
 ```sh
-# Run PyLisC with the recommended angular mode, estimating the curtaining angle automatically
-pylisc --mode angular tilt_series.mrc
+# Run PyLisC, estimating the curtaining angle automatically
+pylisc tilt_series.mrc
 
 # Manually define the curtaining angle
-pylisc --mode angular --angle 50 tilt_series.mrc
+pylisc --angle 50 tilt_series.mrc
 
 # Manually define the pixel size (instead of reading from MRC header)
-pylisc --mode angular --pixel-size 4.4 tilt_series.mrc
+pylisc --pixel-size 4.4 tilt_series.mrc
 
-# Clear vacuum and contamination via masking, and save masks
-pylisc --mode angular --clear-vacuum --clear-contamination --masks masks_dir/ tilt_series.mrc
-
-# Use the linear notch mode instead
+# Use the linear notch mode instead (note this will log a warning message)
 pylisc --mode linear tilt_series.mrc
 ```
 
 ### Destriping mode
 
-Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the required `--mode`/`-m` flag:
+Curtaining removal works by finding curtaining's signature in Fourier space and dimming it. PyLisC offers two ways to do this, selected with the `--mode`/`-m` flag:
 
 - **`angular` (recommended).** Dims frequencies by their *direction*, regardless of how close they are to the zero-frequency origin. This keeps large-scale contrast and fine detail intact at every radius, so curtain removal strength does not affect signal preservation. Only structures genuinely running at the same angle as the curtains are affected, since they share the Fourier signature.
-- **`linear`.** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
+- **`linear` (deprecated).** Dims frequencies by their *distance* from the curtain line rather than their direction. Below a radius set by `--notch-fraction`, distance alone can no longer distinguish direction at all, so without `--protect-fraction` exempting a small disc around the origin, large-scale contrast gets suppressed at every angle near that radius, not just along the curtains. Protecting that disc, in turn, risks letting broad, low-frequency curtaining pass through unfiltered if the curtaining's own frequency sits close to the protected radius. `angular` avoids this trade-off entirely.
 
-### Options
+### Previewing destriping strength
+Before committing to a full run, different strength values can be previewed against on a single frame:
 
-#### General
-Option | Default | Description
---|--|--
-`--pixel-size` | *(read from MRC header)* | Override the pixel size, in nm. Use this if the header value is missing or unreliable.
-`-v`, `--verbose` | `False` | Print per-tilt progress and parameter summary.
+```sh
+pylisc --preview-strengths 3,5,8,12,20 tilt_series.mrc
+```
 
-#### De-curtaining options
-Option | Default | Description
---|--|--
-`-m`, `--mode` | *(required)* | Destriping approach: `angular` (recommended) or `linear` (legacy). See [Destriping mode](#destriping-mode) above.
-`--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
-`--filter-threshold` | `5000.0` | High-pass cutoff, in nm. Large-scale structure below this frequency is removed before masking and destriping.
-`--angular-width` | `8.0` | Angular width of the destriping notch, in degrees. Only used when `--mode angular`. Narrower keeps more real structure sharing a nearby angle to the curtains, at the cost of weaker curtain removal.
-`--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Only used when `--mode linear`. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind.
-`--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. Only used when `--mode linear`. See [Destriping mode](#destriping-mode) above for why this exists and its trade-off.
+This saves `destripe_strength_preview.tiff`, a side-by-side montage labelled with each value, and exits without processing the rest of the stack. Uses `--reference-frame` (see [below](#choosing-a-reference-frame)) as the preview frame.
 
-#### Mask options
-Option | Default | Description
---|--|--
-`--clear-contamination` | `False` | Detect dark contamination and replace it with a neutral local mean. Off by default (decurtaining only).
-`--clear-vacuum` | `False` | Detect bright vacuum regions and replace it with a neutral local mean. Off by default (decurtaining only).
-`--con-multiplier` | `1.5` | Contamination threshold, as a multiple of the blurred image's standard deviation.
-`--vac-multiplier` | `1.5` | Vacuum threshold, as a multiple of the blurred image's standard deviation.
-`--fill-sigma` | *(=`--filter-threshold`)* | Length scale (nm) for the neutral fill of cleared regions (lower for more local blending). Only used if masking is enabled.
-`--iters` | `4` | Number of binary dilation iterations applied to each mask.
-`--masks` | *(none)* | Directory to save each frame's vacuum/contamination masks as TIFF, for quality control.
+### Choosing a reference frame
+The reference frame should be the tilt with the least foreshortening and the best signal-to-noise, since that gives the most reliable curtain angle estimate and the clearest destriping preview. In practice this is the 0° tilt (or the pretilt used during lamella imaging).
+
+- **Dose-symmetric schemes** (0° acquired first, then alternating ±): use `--reference-frame 0`.
+- **Continuous sweeps** (most-negative tilt acquired first): 0° sits in the middle of the stack, so use roughly `--reference-frame <n//2>` for an n-tilt series.
+
+By default, the reference frame is taken as the middle of the stack, under the assumption that this will be correct for continous sweeps and workable for dose-symmetric schemes (vs using the first frame which would be correct for dose-symmetric but an extreme tilt angle for continous).
+
+## Batch mode
+
+`INPUT_PATH` can be a directory instead of a single MRC. When it is, PyLisC processes every tilt series it finds, and `--output-dir` (required in this mode) receives the cleared output, mirroring the input directory's structure.
+
+```sh
+pylisc raw_tilt_series/ --output-dir cleared_tilt_series/
+```
+
+Files already carrying a `_PyLisC_` suffix (i.e. previous PyLisC output) are skipped, so re-running against the same directory won't reprocess its own results.
+
+### Shared curtain angle
+Unless `--angle` is given explicitly, single-file mode estimates the curtaining angle from one frame. In batch mode, PyLisC instead estimates an angle **per series** and combines them into a single shared angle, which is then applied to every series in the batch rather than letting each one drift independently.
+
+The combination is a confidence-weighted circular mean: each series' angle is weighted by its own confidence ratio (see [Curtain angle diagnostic plot](#curtain-angle-diagnostic-plot) below), so a series with a clear, sharp peak counts for more than one with a flat, uncertain profile.
+
+### Outlier detection
+
+If any individual series' own angle estimate differs from the batch consensus by more than `--angle-outlier-threshold` (default `5.0` degrees), a warning is printed naming that series:
+
+```
+WARNING: sample_07.mrc angle (58.3 deg) deviates 41.2 deg from consensus (17.1 deg) -- check its diagnostic plot
+```
 
 ## Output
-A cleared MRC stack, one processed frame per input tilt, at the same dimensions and pixel size as the input. If `--masks` is given, per-tilt `tilt_NNN_vacuum.tiff` and `tilt_NNN_contamination.tiff` masks are written alongside it.
+A cleared MRC stack, one processed frame per input tilt, at the same dimensions and pixel size as the input.
 
 ### Curtain angle diagnostic plot
 
@@ -114,13 +143,12 @@ Aspect | LisC (ImageJ macro) | PyLisC
 -- | -- | --
 Bit depth | Converts to 8-bit before processing | Float32 throughout (not directly comparable to Fiji output at the pixel-level)
 Bandpass/high-pass filter | ImageJ's FFT Bandpass Filter (Gaussian-weighted large/small cutoffs) | Difference-of-Gaussians high-pass, computed via FFT
-Mask threshold | Manual Brightness/Contrast check, applied by hand per lamella | Automated: `mean ± (multiplier × SD)` of the blurred image, same rule the macro's "Apply" step performs
+Masking | Manual Brightness/Contrast check, applied by hand per lamella | No masking performed
 Curtain orientation | Must be horizontal; user manually rotates the lamella image if not | Any angle, supplied manually or auto-estimated from the FFT power spectrum[^estimation]; no image rotation needed, the Fourier notch itself is rotated
 Curtain angle detection | Not automated | Automated, with a saved diagnostic plot and confidence ratio[^diagnosticplot]
 Directional filtering | FFT Bandpass Filter with `suppress=Horizontal` | Gaussian notch in Fourier space, gated by angle (`--mode angular`) or by distance (`--mode linear`)
 Processing scope | One image at a time (the lamella overview) | Whole tilt series in one call, each frame processed independently
 Output | Cleared image in Fiji | Cleared MRC stack, same dimensions/pixel size as input
-Mask inspection | Visual only, within Fiji | Optional per-tilt vacuum/contamination masks saved as TIFF (`--masks`)
 
 
 ## Citation

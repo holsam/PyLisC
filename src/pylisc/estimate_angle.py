@@ -3,10 +3,10 @@ PyLisC: curtain angle estimation from FFT power spectrum and diagnostic plotting
 '''
 
 # Import external libraries
-from pathlib import Path
-
 import matplotlib, matplotlib.pyplot as plt, numpy as np
+from pathlib import Path
 from scipy import ndimage as ndi
+
 
 def estimate_curtain_angle(
     frame: np.ndarray,
@@ -87,3 +87,17 @@ def plot_angular_energy(
     fig.savefig(output_path, format="tiff", dpi=dpi)
     plt.close(fig)
     return output_path
+
+def combine_angles(angles_deg: list, confidences: list) -> tuple:
+    '''
+    Confidence-weighted circular mean of curtain angles
+    '''
+    angles = np.asarray(angles_deg, dtype=float)
+    conf = np.asarray(confidences, dtype=float)
+    doubled = np.deg2rad(angles * 2)
+    x = np.sum(conf * np.cos(doubled))
+    y = np.sum(conf * np.sin(doubled))
+    consensus = np.degrees(np.arctan2(y, x)) / 2
+    consensus = ((consensus + 90) % 180) - 90  # wrap to (-90, 90]
+    agreement = np.sqrt(x ** 2 + y ** 2) / conf.sum()
+    return float(consensus), float(agreement)

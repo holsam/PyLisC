@@ -12,8 +12,9 @@ except ImportError as e:
     raise ImportError('PyLisC requirements not met. Please see README for information.') from e
 
 # Import internal PyLisC modules
-from pylisc.estimate_angle import estimate_curtain_angle, plot_angular_energy
-from pylisc.lisc import lisc_clear_frame
+from pylisc.batch import run_batch
+from pylisc.log import configure_logger, logger
+from pylisc.single import run_single
 
 # Set up Typer class
 pylisc = typer.Typer(
@@ -25,153 +26,119 @@ pylisc = typer.Typer(
 # Define command for pylisc
 @pylisc.command()
 def main(
-    input_mrc: Annotated[
+    input_path: Annotated[
         Path,
         typer.Argument(help='MRC file to apply LisC algorithm to')
     ],
     mode: Annotated[
         Literal['angular', 'linear'],
-        typer.Option('-m', '--mode', help='Method of de-curtaining to use (angular or linear)', rich_help_panel='De-curtaining options')
-    ],
+        typer.Option('-m', '--mode', help='Method of de-curtaining to use [dim]\\[default: angular][/dim] [bold yellow]\\[WARNING: linear mode is deprecated, angular mode is recommended][/]', show_default = False, rich_help_panel='De-curtaining options')
+    ] = 'angular',
     output_mrc: Annotated[
         Optional[Path],
-        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_mrc with _PyLisC_[mode] suffix)', exists=False)
+        typer.Argument(help='Path to output MRC file (defaults to the same filename as input_path with _PyLisC_[mode] suffix)', exists=False)
     ] = None,
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory)', rich_help_panel='Batch options')
+    ] = None,
+    verbosity: Annotated[
+        int,
+        typer.Option('-v', '--verbose', count=True, help='Print additional progress messages')
+    ] = 0,
+    apply_filter: Annotated[
+        bool,
+        typer.Option('--apply-filter', help='Apply high-pass filter before destriping', rich_help_panel='Filtering options', show_default=False)
+    ] = False,
+    filter_threshold: Annotated[
+        float,
+        typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='Filtering options',)
+    ] = 5000.0,
     pixel_size: Annotated[
         Optional[float],
-        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header')
+        typer.Option('--pixel-size', help='Override pixel size (nm) read from MRC header', rich_help_panel='Filtering options', min=0)
     ] = None,
-    verbose: Annotated[
-        bool,
-        typer.Option('-v', '--verbose', help='Print additional progress messages')
-    ] = False,
     curtain_angle: Annotated[
         Optional[float],
         typer.Option('--angle', help='Angle of curtaining from horizontal (0°)', rich_help_panel='De-curtaining options')
     ] = None,
-    filter_threshold: Annotated[
-        float,
-        typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='De-curtaining options')
-    ] = 5000.0,
+    reference_frame: Annotated[
+        Optional[int],
+        typer.Option('--reference-frame', help='Stack index used for angle estimation and the destriping preview', rich_help_panel='De-curtaining options', min=0)
+    ] = None,
     angular_width: Annotated[
         float,
         typer.Option('--angular-width', help='Angular width (degrees) of the directional destriping notch. Narrower keeps more real structure at the cost of weaker curtain removal; only structure at the same angle as the curtains is unavoidably attenuated.', rich_help_panel='De-curtaining options')
     ] = 8.0,
+    preview_strengths: Annotated[
+        Optional[str],
+        typer.Option('--preview-strengths', help='Comma-separated values to preview before committing to a full run (angular width in degrees for --mode angular, notch fraction for --mode linear)', rich_help_panel='De-curtaining options')
+    ] = None,
     notch_frac: Annotated[
         float,
-        typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
+        typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width in linear mode [dim]\\[default: 0.03][/dim] [bold yellow]\\[WARNING: linear mode is deprecated][/]', show_default = False, rich_help_panel='De-curtaining options')
     ] = 0.03,
     dc_protect_frac: Annotated[
         float,
-        typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping', rich_help_panel='De-curtaining options')
+        typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping in linear mode [dim]\\[default: 0.01][/dim] [bold yellow]\\[WARNING: linear mode is deprecated][/]', show_default = False, rich_help_panel='De-curtaining options')
     ] = 0.01,
-    clear_contamination: Annotated[
-        bool,
-        typer.Option('--clear-contamination', help='Detect dark contamination regions and replace with neutral local mean', rich_help_panel='Mask options')
-    ] = False,
-    clear_vacuum: Annotated[
-        bool,
-        typer.Option('--clear-vacuum', help='Detect bright vacuum regions and replace with neutral local mean', rich_help_panel='Mask options')
-    ] = False,
-    con_mult: Annotated[
+    angle_outlier_threshold: Annotated[
         float,
-        typer.Option('--con-multiplier', help='Contaminant threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    vac_mult: Annotated[
-        float,
-        typer.Option('--vac-multiplier', help='Vacuum threshold multiplier on blurred SD', rich_help_panel='Mask options')
-    ] = 1.5,
-    fill_sigma: Annotated[
-        Optional[float],
-        typer.Option('--fill-sigma', help='Length scale (nm) for the netural fill for cleared regions', rich_help_panel='Mask options')
-    ] = None,
-    dilate_iter: Annotated[
-        int,
-        typer.Option('--iters', help='Binary dilation iterations for masking', rich_help_panel='Mask options')
-    ] = 4,
-    save_masks: Annotated[
-        Optional[Path],
-        typer.Option('--masks', help='Path to directory to save per-frame vacuum/contamination masks as TIFF images', rich_help_panel='Mask options')
-    ] = None,
+        typer.Option('--angle-outlier-threshold', help='Warn if an individual series\' own angle estimate differs from the batch consensus by more than this many degrees.', rich_help_panel='Batch options')
+    ] = 5.0,
 ):
-    # Set output file path if none provided
-    if output_mrc is None:
-            base_stem = f'{input_mrc.stem}_PyLisC_{mode}'
-            output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}.mrc')
-            if output_mrc.exists():
-                counter = 1
-                while True:
-                    output_mrc = Path(f'{input_mrc.parents[0]}/{base_stem}_{counter}.mrc')
-                    if not output_mrc.exists():
-                        break
-                    counter += 1
-
-    # Read data from input_mrc
-    with mrcfile.open(input_mrc, permissive=True) as mrc:
-        data = mrc.data.astype(np.float32)
-        voxel_size = mrc.voxel_size # in Ångstroms
-    if data.ndim == 2:
-        data = data[np.newaxis, ...]
-
-    # Resolve pixel size
-    if pixel_size is None:
-        pixel_size = float(voxel_size.x) / 10.0
-    if pixel_size <= 0:
-        raise ValueError('Pixel size cannot be less than or equal to 0')
-
-    # Create save masks directory if required
-    if save_masks is not None:
-        save_masks.mkdir(parents=True, exist_ok=True)
-
-    # Create placeholder for cleared frames
-    cleared_stack = np.empty_like(data, dtype=np.float32)
-
-    # Estimate curtaining angle
-    if curtain_angle is None:
-        mid_frame = len(data) // 2
-        curtain_angle, angular_energy = estimate_curtain_angle(data[mid_frame])
-        plot_angular_energy(angular_energy, curtain_angle, output_dir=output_mrc.parent)
+    # CLI argument/option validation
+    if input_path.is_dir():
+        if output_dir is None:
+            raise typer.BadParameter('--output-dir is required when input_path is a directory')
+        if output_mrc is not None:
+            print(f'Ignoring argument: {output_mrc} (output filename)')
+        if preview_strengths is not None:
+            print(f'Ignoring option: --preview-strengths {preview_strengths}')
+        batch = True
     else:
-        angular_energy = None
+        if output_dir is not None:
+            print(f'Ignoring option: --output-dir {output_dir}')
+        batch = False
+    verbosity = 2 if verbosity >= 2 else verbosity
 
-    # Output processing information if verbose
-    if verbose:
-        print()
-        print(f'Input file: {input_mrc}')
-        print(f'Output file: {output_mrc}')
-        print(f'Voxel size: {voxel_size}')
-        print(f'Pixel size: {pixel_size}')
-        print(f'{"Estimated c" if angular_energy is not None else "C"}urtaining angle: {curtain_angle}{f"°; confidence: {angular_energy.max()/np.median(angular_energy)}" if angular_energy is not None else "°"}')
-        print()
+    # Set up logging
+    configure_logger(batch, input_path, output_mrc, output_dir, verbosity)
+    logger.debug('running pylisc with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
 
-    # Apply LisC to each frame
-    for i, frame in enumerate(data):
-        if verbose:
-            print(f'Processing tilt {i+1}/{data.shape[0]}')
-        cleared, masks = lisc_clear_frame(
-            frame,
-            decurtaining_mode=mode,
-            pixel_size_nm=pixel_size,
+    if mode == 'linear':
+        logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
+
+    # Branch on batch vs single processing
+    if batch:
+        run_batch(
+            input_dir=input_path,
+            output_dir=output_dir,
+            mode=mode,
+            apply_filter=apply_filter,
+            filter_threshold=filter_threshold,
+            pixel_size=pixel_size, 
             curtain_angle=curtain_angle,
-            filter_threshold_nm=filter_threshold,
-            contaminant_multiplier=con_mult,
-            vacuum_multiplier=vac_mult,
-            dilate_iterations=dilate_iter,
-            angular_width_deg=angular_width,
-            destripe_notch_fraction=notch_frac,
+            reference_frame=reference_frame,
+            angular_width=angular_width,
+            notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
-            clear_vacuum=clear_vacuum,
-            clear_contamination=clear_contamination,
-            fill_sigma_nm=fill_sigma,
+            angle_outlier_threshold=angle_outlier_threshold,
         )
-        cleared_stack[i] = cleared
-        if save_masks:
-            for name, region in masks.items():
-                stem = name.replace("_mask", "")
-                tifffile.imwrite(save_masks / f"tilt_{i:03d}_{stem}.tiff", region.astype(np.uint8) * 255)
-        print(f'Processed tilt {i+1}/{data.shape[0]}')
-
-    # Save output MRC
-    with mrcfile.new(output_mrc, overwrite=True) as out:
-        out.set_data(cleared_stack.astype(np.float32))
-        out.voxel_size = voxel_size
+    else:
+        run_single(
+            input_path=input_path,
+            output_mrc=output_mrc,
+            mode=mode,
+            apply_filter=apply_filter,
+            filter_threshold=filter_threshold,
+            pixel_size=pixel_size, 
+            curtain_angle=curtain_angle,
+            reference_frame=reference_frame,
+            angular_width=angular_width,
+            notch_frac=notch_frac,
+            dc_protect_frac=dc_protect_frac,
+            preview_strengths=preview_strengths,
+        )
+    logger.info('pylisc completed')
+    raise typer.Exit()
