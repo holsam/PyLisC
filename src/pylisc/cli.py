@@ -46,6 +46,10 @@ def main(
         int,
         typer.Option('-v', '--verbose', count=True, help='Print additional progress messages')
     ] = 0,
+    apply_filter: Annotated[
+        bool,
+        typer.Option('--apply-filter', help='Apply high-pass filter before destriping', rich_help_panel='Filtering options', show_default=False)
+    ] = False,
     filter_threshold: Annotated[
         float,
         typer.Option('--filter-threshold', help='High-pass cutoff (nm)', rich_help_panel='Filtering options',)
@@ -111,6 +115,7 @@ def main(
             input_dir=input_path,
             output_dir=output_dir,
             mode=mode,
+            apply_filter=apply_filter,
             filter_threshold=filter_threshold,
             pixel_size=pixel_size, 
             curtain_angle=curtain_angle,
@@ -125,6 +130,7 @@ def main(
             input_path=input_path,
             output_mrc=output_mrc,
             mode=mode,
+            apply_filter=apply_filter,
             filter_threshold=filter_threshold,
             pixel_size=pixel_size, 
             curtain_angle=curtain_angle,

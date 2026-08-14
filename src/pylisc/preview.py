@@ -16,6 +16,7 @@ def generate_strength_preview(
     pixel_size_nm,
     values,
     curtain_angle,
+    apply_filter,
     filter_threshold_nm,
     dc_protect_frac,
     notch_frac,
@@ -37,6 +38,7 @@ def generate_strength_preview(
                 decurtaining_mode='angular',
                 pixel_size_nm=pixel_size_nm,
                 curtain_angle=curtain_angle,
+                apply_filter=apply_filter,
                 filter_threshold_nm=filter_threshold_nm,
                 angular_width_deg=value
             )
@@ -47,6 +49,7 @@ def generate_strength_preview(
                 decurtaining_mode='linear',
                 pixel_size_nm=pixel_size_nm,
                 curtain_angle=curtain_angle,
+                apply_filter=apply_filter,
                 filter_threshold_nm=filter_threshold_nm,
                 destripe_notch_fraction=value,
                 dc_protect_frac=dc_protect_frac
