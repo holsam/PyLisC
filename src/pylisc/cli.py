@@ -32,8 +32,8 @@ def main(
     ],
     mode: Annotated[
         Literal['angular', 'linear'],
-        typer.Option('-m', '--mode', help='Method of de-curtaining to use (angular or linear)', rich_help_panel='De-curtaining options')
-    ],
+        typer.Option('-m', '--mode', help='Method of de-curtaining to use [dim]\\[default: angular][/dim] [bold yellow]\\[WARNING: linear mode is deprecated, angular mode is recommended][/]', show_default = False, rich_help_panel='De-curtaining options')
+    ] = 'angular',
     output_mrc: Annotated[
         Optional[Path],
         typer.Argument(help='Path to output MRC file (defaults to the same filename as input_path with _PyLisC_[mode] suffix)', exists=False)
@@ -72,11 +72,11 @@ def main(
     ] = None,
     notch_frac: Annotated[
         float,
-        typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width', rich_help_panel='De-curtaining options')
+        typer.Option('--notch-fraction', help='Width of the directional destriping notch as a fraction of image width in linear mode [dim]\\[default: 0.03][/dim] [bold yellow]\\[WARNING: linear mode is deprecated][/]', show_default = False, rich_help_panel='De-curtaining options')
     ] = 0.03,
     dc_protect_frac: Annotated[
         float,
-        typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping', rich_help_panel='De-curtaining options')
+        typer.Option('--protect-fraction', help='Fraction of image width around Fourier origin exempted from destriping in linear mode [dim]\\[default: 0.01][/dim] [bold yellow]\\[WARNING: linear mode is deprecated][/]', show_default = False, rich_help_panel='De-curtaining options')
     ] = 0.01,
     angle_outlier_threshold: Annotated[
         float,
@@ -101,6 +101,9 @@ def main(
     # Set up logging
     configure_logger(batch, input_path, output_mrc, output_dir, verbosity)
     logger.debug('running pylisc with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
+
+    if mode == 'linear':
+        logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
 
     # Branch on batch vs single processing
     if batch:
