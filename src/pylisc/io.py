@@ -32,11 +32,12 @@ def writeMrcFile(data, voxel_size, path: Path):
         out.set_data(data.astype(np.float32))
         out.voxel_size = voxel_size
 
-def find_tilt_series(input_dir, pattern: str = '*.mrc'):
+def find_input_files(input_dir, pattern: str = '*.mrc', recursive: bool = True):
     '''
-    Recursively find tilt series MRCs under input_dir, excluding PyLisC's own output
+    Find input MRCs under input_dir, excluding PyLisC's own output, recursing into subdirectories when recursive=True
     '''
+    glob = input_dir.rglob if recursive else input_dir.glob
     return sorted(
-        p for p in input_dir.rglob(pattern)
+        p for p in glob(pattern)
         if '_PyLisC_' not in p.stem
     )
