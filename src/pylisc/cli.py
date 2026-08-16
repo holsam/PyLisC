@@ -3,7 +3,9 @@ PyLisC: command-line entry point
 '''
 
 # Import external libraries
+from importlib.metadata import version
 from pathlib import Path
+from rich.console import Console
 from typing import Annotated, Literal, Optional
 
 try:
@@ -24,7 +26,17 @@ pylisc = typer.Typer(
     context_settings={'help_option_names': ['-h', '--help']},
 )
 
+# Set up version callback
+def version_callback(value: bool | None) -> None:
+    if value:
+        Console().print(f'\nPyLisC version: [bold cyan]v{version('pylisc')}[/bold cyan]\n', highlight=False)
+        raise typer.Exit()
+
 # Shared options
+VersionOpt = Annotated[
+    bool | None,
+    typer.Option('-V', '--version', help='Print version number and exit.', callback=version_callback, is_eager=True),
+]
 ModeOpt = Annotated[
     Literal['angular', 'linear'],
     typer.Option('-m', '--mode', help='Method of de-curtaining to use. [dim]\\[default: angular][/dim] [bold yellow]\\[WARNING: linear mode is deprecated, angular mode is recommended][/]', show_default=False, rich_help_panel='De-curtaining options'),
@@ -62,6 +74,14 @@ AngleOutlierThresholdOpt = Annotated[
     typer.Option('--angle-outlier-threshold', help='Warn if an individual angle estimate differs from its consensus by more than this many degrees.', rich_help_panel='Batch options'),
 ]
 
+# Define callback for pylisc (to allow version option)
+@pylisc.callback()
+def main(
+    version: VersionOpt = None,
+):
+    pass
+
+# Define command for pylisc stack
 @pylisc.command()
 def stack(
     input_path: Annotated[
@@ -97,6 +117,7 @@ def stack(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    version: VersionOpt = None,
 ):
     '''
     Destripe a single MRC tilt-series stack, or a directory of them.
@@ -140,6 +161,7 @@ def stack(
     logger.info('pylisc completed')
     raise typer.Exit()
 
+# Define command for pylisc frames
 @pylisc.command()
 def frames(
     input_path: Annotated[
@@ -171,6 +193,7 @@ def frames(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    version: VersionOpt = None,
 ):
     '''
     Destripe a directory of 2D MRC frames.
