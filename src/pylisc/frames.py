@@ -77,7 +77,8 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
     for path in paths:
         data, _ = readMrcFile(path)
         angle, energy = estimate_curtain_angle(data[0])
-        confidences[path] = energy.max() / np.median(energy)
+        median_energy = np.median(energy)
+        confidences[path] = energy.max() / median_energy if median_energy > 0 else 0.0
         angles[path] = angle
         logger.debug('({}) tilt {}° est. angle: {} (conf.: {})', path.name, tilt_of[path], angle, confidences[path])
 
