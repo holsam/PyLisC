@@ -70,7 +70,8 @@ def plot_angular_energy(
     order = np.argsort(curtain_bins)
     curtain_bins_sorted = curtain_bins[order]
     energy_sorted = angular_energy[order]
-    confidence = angular_energy.max() / np.median(angular_energy)
+    median_energy = np.median(angular_energy)
+    confidence = angular_energy.max() / median_energy if median_energy > 0 else 0.0
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(curtain_bins_sorted, energy_sorted, color="tab:blue", lw=1.2)
     ax.axvline(estimated_angle_deg, color="tab:red", ls="--", lw=1.2, label=f"detected angle = {estimated_angle_deg:.1f} deg")
@@ -99,5 +100,6 @@ def combine_angles(angles_deg: list, confidences: list) -> tuple:
     y = np.sum(conf * np.sin(doubled))
     consensus = np.degrees(np.arctan2(y, x)) / 2
     consensus = ((consensus + 90) % 180) - 90  # wrap to (-90, 90]
-    agreement = np.sqrt(x ** 2 + y ** 2) / conf.sum()
+    conf_sum = conf.sum()
+    agreement = np.sqrt(x ** 2 + y ** 2) / conf_sum if conf_sum > 0 else 0.0
     return float(consensus), float(agreement)

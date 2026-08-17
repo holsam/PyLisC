@@ -64,7 +64,9 @@ def _process_series(
         if curtain_angle is None:
             resolved_angle, angular_energy = estimate_curtain_angle(data[resolved_reference_frame])
             plot_angular_energy(angular_energy, resolved_angle, output_dir=out_path.parent)
-            logger.info('({}) estimated curtaining angle: {}° (confidence: {})', path.name, resolved_angle, angular_energy.max() / np.median(angular_energy))
+            median_energy = np.median(angular_energy)
+            confidence = angular_energy.max() / median_energy if median_energy > 0 else 0.0
+            logger.info('({}) estimated curtaining angle: {}° (confidence: {})', path.name, resolved_angle, confidence)
         else:
             resolved_angle = curtain_angle
 
@@ -181,7 +183,8 @@ def _run_stack_batch(
             frame_index = reference_frame if reference_frame is not None else len(data) // 2
             frame = data[frame_index]
             angle, energy = estimate_curtain_angle(frame)
-            confidence = energy.max() / np.median(energy)
+            median_energy = np.median(energy)
+            confidence = energy.max() / median_energy if median_energy > 0 else 0.0
             angles.append(angle); confidences.append(confidence)
             logger.debug('({}) est. angle: {} (conf.: {})', path.name, angle, confidence)
 
