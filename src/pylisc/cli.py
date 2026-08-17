@@ -43,7 +43,7 @@ ModeOpt = Annotated[
 ]
 VerbosityOpt = Annotated[
     int,
-    typer.Option('-v', '--verbose', count=True, help='Increase verbosity of logging.'),
+    typer.Option('-v', '--verbose', count=True, help='Increase verbosity of logging.', show_default=False, metavar=''),
 ]
 ApplyFilterOpt = Annotated[
     bool,
