@@ -73,6 +73,10 @@ AngleOutlierThresholdOpt = Annotated[
     float,
     typer.Option('--angle-outlier-threshold', help='Warn if an individual angle estimate differs from its consensus by more than this many degrees.', rich_help_panel='Batch options'),
 ]
+ForceOpt = Annotated[
+    bool,
+    typer.Option('--force', help='Overwrite existing output files.', show_default=False)
+]
 
 # Define callback for pylisc (to allow version option)
 @pylisc.callback()
@@ -117,6 +121,7 @@ def stack(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    force: ForceOpt = False,
     version: VersionOpt = None,
 ):
     '''
@@ -157,6 +162,7 @@ def stack(
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
         preview_strengths=preview_strengths,
+        force=force,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
@@ -193,6 +199,7 @@ def frames(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    force: ForceOpt = False,
     version: VersionOpt = None,
 ):
     '''
@@ -220,6 +227,7 @@ def frames(
         notch_frac=notch_frac,
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
+        force=force,
     )
     logger.info('pylisc completed')
     raise typer.Exit()

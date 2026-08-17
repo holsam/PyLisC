@@ -39,9 +39,13 @@ def _process_series(
     angular_width,
     notch_frac,
     dc_protect_frac,
+    force,
     preview_strengths=None,
 ):
     with per_file_log(out_path.parent, out_path.stem):
+        if out_path.exists() and not force:
+            logger.error('({}) output {} already exists: use --force to overwrite', path.name, out_path)
+            raise FileExistsError(f'{out_path} already exists: use --force to overwrite')
         data, voxel_size = readMrcFile(path)
 
         # Resolve pixel size
@@ -103,7 +107,7 @@ def _process_series(
                 dc_protect_frac=dc_protect_frac,
             )
 
-        writeMrcFile(cleared_stack, voxel_size, out_path)
+        writeMrcFile(cleared_stack, voxel_size, out_path, force)
         logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
         return resolved_angle
 
@@ -122,6 +126,7 @@ def run_stack(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    force,
     preview_strengths=None,
 ):
     if input_path.is_dir():
@@ -138,6 +143,7 @@ def run_stack(
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
             angle_outlier_threshold=angle_outlier_threshold,
+            force=force,
         )
     else:
         out_path = output_mrc if output_mrc is not None else _default_output_path(input_path, mode)
@@ -154,6 +160,7 @@ def run_stack(
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
             preview_strengths=preview_strengths,
+            force=force,
         )
 
 
@@ -170,6 +177,7 @@ def _run_stack_batch(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    force,
 ):
     series_paths = find_input_files(input_dir, recursive=True)
     if not series_paths:
@@ -214,5 +222,6 @@ def _run_stack_batch(
             angular_width=angular_width,
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
+            force=force,
         )
     logger.info('cleared mrc files written to {}', output_dir)

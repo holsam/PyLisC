@@ -27,7 +27,9 @@ def readMrcFile(path: Path):
         data = data[np.newaxis, ...]
     return data, voxel_size
 
-def writeMrcFile(data, voxel_size, path: Path):
+def writeMrcFile(data, voxel_size, path: Path, force: bool = False):
+    if path.exists() and not force:
+        raise FileExistsError(f'{path} already exists: use --force to overwrite')
     with mrcfile.new(path, overwrite=True) as out:
         out.set_data(data.astype(np.float32))
         out.voxel_size = voxel_size

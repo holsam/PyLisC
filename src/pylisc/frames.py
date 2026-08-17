@@ -27,6 +27,7 @@ def run_frames(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    force,
 ):
     if apply_filter and pixel_size is None:
         raise typer.BadParameter('--pixel-size is required when --apply-filter is set in frames mode (frame headers are not used for pixel size)')
@@ -61,7 +62,7 @@ def run_frames(
                 destripe_notch_fraction=notch_frac,
                 dc_protect_frac=dc_protect_frac,
             )
-            writeMrcFile(cleared[np.newaxis, ...], _read_voxel_size(path), out_path)
+            writeMrcFile(cleared[np.newaxis, ...], _read_voxel_size(path), out_path, force)
             logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
 
     logger.info('cleared mrc files written to {}', output_dir)
