@@ -28,6 +28,7 @@ def run_frames(
     dc_protect_frac,
     angle_outlier_threshold,
     force,
+    dry_run,
 ):
     if apply_filter and pixel_size is None:
         raise typer.BadParameter('--pixel-size is required when --apply-filter is set in frames mode (frame headers are not used for pixel size)')

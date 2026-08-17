@@ -77,6 +77,10 @@ ForceOpt = Annotated[
     bool,
     typer.Option('--force', help='Overwrite existing output files.', show_default=False)
 ]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option('--dry-run', help='Print what would be processed/written without writing any output.', show_default=False),
+]
 
 # Define callback for pylisc (to allow version option)
 @pylisc.callback()
@@ -101,6 +105,8 @@ def stack(
         typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory).', rich_help_panel='Batch options')
     ] = None,
     mode: ModeOpt = 'angular',
+    dry_run: DryRunOpt = False,
+    force: ForceOpt = False,
     verbosity: VerbosityOpt = 0,
     apply_filter: ApplyFilterOpt = False,
     filter_threshold: FilterThresholdOpt = 5000.0,
@@ -121,7 +127,6 @@ def stack(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
-    force: ForceOpt = False,
     version: VersionOpt = None,
 ):
     '''
@@ -163,6 +168,7 @@ def stack(
         angle_outlier_threshold=angle_outlier_threshold,
         preview_strengths=preview_strengths,
         force=force,
+        dry_run=dry_run,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
@@ -187,6 +193,8 @@ def frames(
         typer.Option('--filename-delimiters', help='Characters that separate filename fields, see README for further information.')
     ] = '_',
     mode: ModeOpt = 'angular',
+    dry_run: DryRunOpt = False,
+    force: ForceOpt = False,
     verbosity: VerbosityOpt = 0,
     apply_filter: ApplyFilterOpt = False,
     filter_threshold: FilterThresholdOpt = 5000.0,
@@ -199,7 +207,6 @@ def frames(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
-    force: ForceOpt = False,
     version: VersionOpt = None,
 ):
     '''
@@ -228,6 +235,7 @@ def frames(
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
         force=force,
+        dry_run=dry_run,
     )
     logger.info('pylisc completed')
     raise typer.Exit()

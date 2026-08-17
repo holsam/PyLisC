@@ -40,6 +40,7 @@ def _process_series(
     notch_frac,
     dc_protect_frac,
     force,
+    dry_run,
     preview_strengths=None,
 ):
     with per_file_log(out_path.parent, out_path.stem):
@@ -67,12 +68,17 @@ def _process_series(
         # Estimate curtaining angle if not provided
         if curtain_angle is None:
             resolved_angle, angular_energy = estimate_curtain_angle(data[resolved_reference_frame])
-            plot_angular_energy(angular_energy, resolved_angle, output_dir=out_path.parent)
+            if not dry_run:
+                plot_angular_energy(angular_energy, resolved_angle, output_dir=out_path.parent)
             median_energy = np.median(angular_energy)
             confidence = angular_energy.max() / median_energy if median_energy > 0 else 0.0
             logger.info('({}) estimated curtaining angle: {}° (confidence: {})', path.name, resolved_angle, confidence)
         else:
             resolved_angle = curtain_angle
+
+        if dry_run:
+            logger.info('({}) [dry-run] would write to {} (angle: {}°, pixel size: {})', path.name, out_path, resolved_angle, resolved_pixel_size)
+            return resolved_angle
 
         if preview_strengths is not None:
             values = [float(v) for v in preview_strengths.split(',')]
@@ -127,6 +133,7 @@ def run_stack(
     dc_protect_frac,
     angle_outlier_threshold,
     force,
+    dry_run,
     preview_strengths=None,
 ):
     if input_path.is_dir():
@@ -144,6 +151,7 @@ def run_stack(
             dc_protect_frac=dc_protect_frac,
             angle_outlier_threshold=angle_outlier_threshold,
             force=force,
+            dry_run=dry_run,
         )
     else:
         out_path = output_mrc if output_mrc is not None else _default_output_path(input_path, mode)
@@ -161,6 +169,7 @@ def run_stack(
             dc_protect_frac=dc_protect_frac,
             preview_strengths=preview_strengths,
             force=force,
+            dry_run=dry_run,
         )
 
 
@@ -178,6 +187,7 @@ def _run_stack_batch(
     dc_protect_frac,
     angle_outlier_threshold,
     force,
+    dry_run,
 ):
     series_paths = find_input_files(input_dir, recursive=True)
     if not series_paths:
@@ -223,5 +233,6 @@ def _run_stack_batch(
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
             force=force,
+            dry_run=dry_run,
         )
     logger.info('cleared mrc files written to {}', output_dir)
