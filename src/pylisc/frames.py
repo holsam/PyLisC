@@ -164,9 +164,21 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
     )
     logger.info('overall consensus across {} tilt angle(s): {}° (agreement: {})', len(bucket_consensus), f'{overall_consensus:.1f}', f'{overall_agreement:.3f}')
 
+    outlier_buckets = set()
     for bucket, angle in bucket_consensus.items():
         deviation = min(abs(angle - overall_consensus), 180 - abs(angle - overall_consensus))
         if deviation > angle_outlier_threshold:
-            logger.warning('tilt {}° consensus angle ({}°) deviates {}° from overall consensus ({}°) - check per-tilt agreement', bucket, f'{angle:.1f}', f'{deviation:.1f}', f'{overall_consensus:.1f}')
-
-    return {path: bucket_consensus[round(tilt_of[path])] for path in paths}
+            outlier_buckets.add(bucket)
+    good_buckets = sorted(set(bucket_consensus) - outlier_buckets)
+    resolved_consensus = dict(bucket_consensus)
+    if not good_buckets:
+        logger.warning('every tilt bucket deviates from the overall consensus - no reliable tilt to fall back on, using overall consensus ({}°) for all', f'{overall_consensus:.1f}')
+        resolved_consensus = {bucket: overall_consensus for bucket in bucket_consensus}
+    else:
+        for bucket in outlier_buckets:
+            own_angle = bucket_consensus[bucket]
+            deviation = min(abs(own_angle - overall_consensus), 180 - abs(own_angle - overall_consensus))
+            neighbor = min(good_buckets, key=lambda g: abs(g - bucket))
+            resolved_consensus[bucket] = bucket_consensus[neighbor]
+            logger.warning('tilt {}° consensus angle ({}°) deviates {}° from overall consensus ({}°) - using nearest reliable tilt {}°\'s angle ({}°) instead', bucket, f'{own_angle:.1f}', f'{deviation:.1f}', f'{overall_consensus:.1f}', neighbor, f'{bucket_consensus[neighbor]:.1f}')
+    return {path: resolved_consensus[round(tilt_of[path])] for path in paths}
