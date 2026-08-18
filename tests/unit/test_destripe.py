@@ -30,4 +30,14 @@ class TestDestripe:
         rng = np.random.default_rng(5)
         large_scale = (ndi.gaussian_filter(rng.normal(0, 1, (1024, 1024)), sigma=60) * 200).astype('float32')
         kept = self.retained_fraction(large_scale, -65, directional_destripe_linear, notch_frac=0.02, dc_protect_frac=0.0)
-        assert kept < 0.2  # regression guard for the isotropic-high-pass bug we found and fixed
+        assert kept < 0.2
+
+    def test_zero_angular_width_does_not_produce_nan(self):
+        import numpy as np
+        from pylisc.destripe import directional_destripe_angular
+        from tests.fixtures import synthetic_frame
+        frame = synthetic_frame(size=64, angle_deg=20)
+
+        result = directional_destripe_angular(frame, angle_deg=20, angular_width_deg=0)
+
+        assert not np.isnan(result).any()

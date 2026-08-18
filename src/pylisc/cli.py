@@ -43,7 +43,7 @@ ModeOpt = Annotated[
 ]
 VerbosityOpt = Annotated[
     int,
-    typer.Option('-v', '--verbose', count=True, help='Increase verbosity of logging.'),
+    typer.Option('-v', '--verbose', count=True, help='Increase verbosity of logging.', show_default=False, metavar=''),
 ]
 ApplyFilterOpt = Annotated[
     bool,
@@ -73,6 +73,18 @@ AngleOutlierThresholdOpt = Annotated[
     float,
     typer.Option('--angle-outlier-threshold', help='Warn if an individual angle estimate differs from its consensus by more than this many degrees.', rich_help_panel='Batch options'),
 ]
+ForceOpt = Annotated[
+    bool,
+    typer.Option('--force', help='Overwrite existing output files.', show_default=False)
+]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option('--dry-run', help='Print what would be processed/written without writing any output.', show_default=False),
+]
+WorkersOpt = Annotated[
+    int,
+    typer.Option('--workers', help='Number of parallel processes to use in batch mode (0: all CPUs).', min=0, rich_help_panel='Batch options'),
+]
 
 # Define callback for pylisc (to allow version option)
 @pylisc.callback()
@@ -97,6 +109,8 @@ def stack(
         typer.Option('--output-dir', help='Output directory for batch mode (required when input_path is a directory).', rich_help_panel='Batch options')
     ] = None,
     mode: ModeOpt = 'angular',
+    dry_run: DryRunOpt = False,
+    force: ForceOpt = False,
     verbosity: VerbosityOpt = 0,
     apply_filter: ApplyFilterOpt = False,
     filter_threshold: FilterThresholdOpt = 5000.0,
@@ -118,27 +132,30 @@ def stack(
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
     version: VersionOpt = None,
+    workers: WorkersOpt = 0,
 ):
     '''
     Destripe a single MRC tilt-series stack, or a directory of them.
     '''
+    verbosity = 2 if verbosity >= 2 else verbosity
+    configure_logger(input_path.is_dir(), input_path, output_mrc, output_dir, verbosity)
+    logger.debug('running pylisc stack with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
+
+    if angular_width <= 0:
+        logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
+        raise typer.BadParameter(f'angular width cannot be equal to or less than 0: {angular_width}')
+
     if input_path.is_dir():
         if output_dir is None:
             raise typer.BadParameter('--output-dir is required when input_path is a directory')
         if output_mrc is not None:
-            print(f'Ignoring argument: {output_mrc} (output filename)')
+            logger.warning('[batch mode] ignoring argument: {} (output filename)', output_mrc)
         if preview_strengths is not None:
-            print(f'Ignoring option: --preview-strengths {preview_strengths}')
-        is_dir = True
+            logger.warning('[batch mode] ignoring option: --preview-strengths {}', preview_strengths)
     else:
         if output_dir is not None:
-            print(f'Ignoring option: --output-dir {output_dir}')
-        is_dir = False
-    verbosity = 2 if verbosity >= 2 else verbosity
-
-    configure_logger(is_dir, input_path, output_mrc, output_dir, verbosity)
-    logger.debug('running pylisc stack with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
-
+            logger.warning('[single file mode] ignoring option: --output-dir {}', output_dir)
+    
     if mode == 'linear':
         logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
 
@@ -157,6 +174,9 @@ def stack(
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
         preview_strengths=preview_strengths,
+        force=force,
+        dry_run=dry_run,
+        workers=workers,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
@@ -181,6 +201,8 @@ def frames(
         typer.Option('--filename-delimiters', help='Characters that separate filename fields, see README for further information.')
     ] = '_',
     mode: ModeOpt = 'angular',
+    dry_run: DryRunOpt = False,
+    force: ForceOpt = False,
     verbosity: VerbosityOpt = 0,
     apply_filter: ApplyFilterOpt = False,
     filter_threshold: FilterThresholdOpt = 5000.0,
@@ -194,6 +216,7 @@ def frames(
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
     version: VersionOpt = None,
+    workers: WorkersOpt = 0,
 ):
     '''
     Destripe a directory of 2D MRC frames.
@@ -202,6 +225,10 @@ def frames(
 
     configure_logger(True, input_path, None, output_dir, verbosity)
     logger.debug('running pylisc frames with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
+
+    if angular_width <= 0:
+        logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
+        raise typer.BadParameter(f'angular width cannot be equal to or less than 0: {angular_width}')
 
     if mode == 'linear':
         logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
@@ -220,6 +247,9 @@ def frames(
         notch_frac=notch_frac,
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
+        force=force,
+        dry_run=dry_run,
+        workers=workers,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
