@@ -25,8 +25,8 @@ def configure_logger(batch_mode, input_path, output_mrc, output_dir, verbosity):
 
     # Set up logger
     logger.remove()    # remove default handler
-    logger.add(sys.stderr, format=LOG_FORMAT, level=log_level, colorize=True)    # add terminal logger 
-    logger.add(log_path, format=LOG_FORMAT, level=log_level)    # add file logger
+    logger.add(sys.stderr, format=LOG_FORMAT, level=log_level, colorize=True, enqueue=True)    # add terminal logger 
+    logger.add(log_path, format=LOG_FORMAT, level=log_level, enqueue=True)    # add file logger
 
     # Logging confirmation
     logger.debug('logging configured: stderr and {}, level={}', log_path, log_level)
