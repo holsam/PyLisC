@@ -138,11 +138,12 @@ def stack(
     Destripe a single MRC tilt-series stack, or a directory of them.
     '''
     verbosity = 2 if verbosity >= 2 else verbosity
-    configure_logger(inputh_path.is_dir(), input_path, output_mrc, output_dir, verbosity)
+    configure_logger(input_path.is_dir(), input_path, output_mrc, output_dir, verbosity)
     logger.debug('running pylisc stack with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
 
     if angular_width <= 0:
         logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
+        raise typer.BadParameter(f'angular width cannot be equal to or less than 0: {angular_width}')
 
     if input_path.is_dir():
         if output_dir is None:
@@ -227,6 +228,7 @@ def frames(
 
     if angular_width <= 0:
         logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
+        raise typer.BadParameter(f'angular width cannot be equal to or less than 0: {angular_width}')
 
     if mode == 'linear':
         logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
