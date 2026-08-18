@@ -66,8 +66,7 @@ Option | Default | Description
 Option | Default | Description
 --|--|--
 `--output-dir` | *(required for directory input)* | Output directory for batch mode, mirroring the input directory's structure.
-`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees.
-
+`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees. In `frames` mode, a tilt beyond this threshold also has its angle replaced with its nearest reliable tilt's angle, see [per-tilt curtain angle](#per-tilt-curtain-angle) for details.
 #### Example
 ```sh
 # Run PyLisC, estimating the curtaining angle automatically
@@ -146,7 +145,8 @@ Curtaining orientation drifts slightly with tilt angle, so unless `--angle` is g
 1. Every frame's own angle is estimated.
 2. Frames are grouped by tilt angle, rounded to the nearest whole degree (so e.g. two positions' `-30.00°` and `-29.98°` tilts fall in the same group).
 3. Each group's estimates are combined into a per-tilt consensus (same confidence-weighted circular mean as [batch mode](#shared-curtain-angle)), which is the angle applied to every frame in that group.
-4. All per-tilt consensus angles are then compared against their overall combined consensus; any that deviate by more than `--angle-outlier-threshold` are logged as a warning, the same as [batch mode's outlier detection](#outlier-detection).
+4. All per-tilt consensus angles are then combined into an overall consensus, weighted both by confidence and by `cos(tilt)` (sample thickness grows ~1/cos(tilt) so high tilt angles are less reliable), so they count for less than well-sampled low-tilt groups rather than skewing the overall consensus by an equal vote.
+5. Any per-tilt consensus that still deviates from the overall consensus by more than `--angle-outlier-threshold` is treated as unreliable, and will be destriped at the consensus angle of its nearest reliable tilt (by tilt-angle distance) instead, logging a warning naming both tilts. If every tilt ends up flagged, PyLisC falls back to the overall consensus for all of them.
 
 #### Pixel size
 Individual frame MRCs frequently lack a reliable pixel size in their header, so frames mode does not fall back to it. Pixel size is only needed for the optional high-pass filter — if `--apply-filter` is set, `--pixel-size` must be given explicitly, or PyLisC exits with an error.
