@@ -3,7 +3,8 @@ PyLisC: stack-mode processing
 '''
 
 # Import external libraries
-import numpy as np, typer
+import numpy as np, os, typer
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 # Import internal PyLisC modules
@@ -134,6 +135,7 @@ def run_stack(
     angle_outlier_threshold,
     force,
     dry_run,
+    workers,
     preview_strengths=None,
 ):
     if input_path.is_dir():
@@ -152,6 +154,7 @@ def run_stack(
             angle_outlier_threshold=angle_outlier_threshold,
             force=force,
             dry_run=dry_run,
+            workers=workers,
         )
     else:
         out_path = output_mrc if output_mrc is not None else _default_output_path(input_path, mode)
@@ -188,6 +191,7 @@ def _run_stack_batch(
     angle_outlier_threshold,
     force,
     dry_run,
+    workers,
 ):
     series_paths = find_input_files(input_dir, recursive=True)
     if not series_paths:
@@ -215,24 +219,42 @@ def _run_stack_batch(
                 logger.warning('({}) est. angle ({}°) deviates {}° from consensus ({}°) - check diagnostic plot', path.name, f'{angle:.1f}', f'{deviation:.1f}', f'{consensus_angle:.1f}')
 
         curtain_angle = consensus_angle
-
+    
+    jobs = []
     for path in series_paths:
         relative = path.relative_to(input_dir)
         out_path = output_dir / relative.parent / f'{path.stem}_PyLisC_{mode}.mrc'
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        _process_series(
-            path,
-            out_path,
-            mode=mode,
-            apply_filter=apply_filter,
-            filter_threshold=filter_threshold,
-            pixel_size=pixel_size,
-            curtain_angle=curtain_angle,
-            reference_frame=reference_frame,
-            angular_width=angular_width,
-            notch_frac=notch_frac,
-            dc_protect_frac=dc_protect_frac,
-            force=force,
-            dry_run=dry_run,
-        )
+        jobs.append((path, out_path))
+
+    max_workers = os.cput_count()
+    workers = max_workers if workers == 0 else min(workers, max_workers)
+    
+    logger.info('processing {} files across {} workers', len(jobs), workers)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(
+                _process_series,
+                path,
+                out_path,
+                mode=mode,
+                apply_filter=apply_filter,
+                filter_threshold=filter_threshold,
+                pixel_size=pixel_size,
+                curtain_angle=curtain_angle,
+                reference_frame=reference_frame,
+                angular_width=angular_width,
+                notch_frac=notch_frac,
+                dc_protect_frac=dc_protect_frac,
+                force=force,
+                dry_run=dry_run,
+            ): path
+            for path, out_path in jobs
+        }
+        for future in as_completed(futures):
+            path = futures[future]
+            try:
+                future.result()
+            except Exception:
+                logger.error('({}) failed during batch processing', path.name)
     logger.info('cleared mrc files written to {}', output_dir)

@@ -81,6 +81,10 @@ DryRunOpt = Annotated[
     bool,
     typer.Option('--dry-run', help='Print what would be processed/written without writing any output.', show_default=False),
 ]
+WorkersOpt = Annotated[
+    int,
+    typer.Option('--workers', help='Number of parallel processes to use in batch mode (0: all CPUs).', min=0, rich_help_panel='Batch options'),
+]
 
 # Define callback for pylisc (to allow version option)
 @pylisc.callback()
@@ -128,6 +132,7 @@ def stack(
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
     version: VersionOpt = None,
+    workers: WorkersOpt = 0,
 ):
     '''
     Destripe a single MRC tilt-series stack, or a directory of them.
@@ -169,6 +174,7 @@ def stack(
         preview_strengths=preview_strengths,
         force=force,
         dry_run=dry_run,
+        workers=workers,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
@@ -208,6 +214,7 @@ def frames(
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
     version: VersionOpt = None,
+    workers: WorkersOpt = 0,
 ):
     '''
     Destripe a directory of 2D MRC frames.
@@ -236,6 +243,7 @@ def frames(
         angle_outlier_threshold=angle_outlier_threshold,
         force=force,
         dry_run=dry_run,
+        workers=workers,
     )
     logger.info('pylisc completed')
     raise typer.Exit()
