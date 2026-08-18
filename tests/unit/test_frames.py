@@ -65,3 +65,22 @@ class TestEstimatePerTiltAngles:
 
         assert resolved[paths[0]] == resolved[paths[1]]
         assert any('no reliable tilt' in str(m) for m in messages)
+
+
+    def test_confidence_spike_does_not_skew_overall_consensus(self, tmp_path):
+        paths, tilt_of = [], {}
+        # a consistent low-tilt cluster, all striped at 20deg with ordinary confidence
+        for i, tilt in enumerate([-10, 0, 10]):
+            path = tmp_path / f'low_{i}.mrc'
+            write_synthetic_frame(path, angle_deg=20, seed=i)
+            paths.append(path)
+            tilt_of[path] = tilt
+        # a single high-tilt frame with a much sharper peak at a wildly different angle
+        spike_path = tmp_path / 'spike.mrc'
+        write_synthetic_frame(spike_path, angle_deg=-60, seed=42, amplitude=600.0, noise_std=1.0)
+        paths.append(spike_path)
+        tilt_of[spike_path] = 50
+
+        resolved = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold=15.0)
+        # the low-tilt cluster should still win the overall consensus, not be outvoted by the single spiky frame
+        assert resolved[tmp_path / 'low_0.mrc'] == pytest.approx(20, abs=1.0)
