@@ -147,16 +147,20 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
         tilt_buckets.setdefault(bucket, []).append(path)
 
     bucket_consensus = {}
+    bucket_weight = {}
     for bucket, bucket_paths in tilt_buckets.items():
+        bucket_confidences = [confidences[p] for p in bucket_paths]
         consensus, agreement = combine_angles(
             [angles[p] for p in bucket_paths],
-            [confidences[p] for p in bucket_paths],
+            bucket_confidences,
         )
         bucket_consensus[bucket] = consensus
+        # High-tilt frames carry less signal (sample thickness grows ~1/cos(tilt)) so reduce weighting for overall consensus
+        bucket_weight[bucket] = sum(bucket_confidences) * np.cos(np.deg2rad(bucket))
         logger.info('tilt {}°: consensus angle {}° (agreement: {}, n={})', bucket, f'{consensus:.1f}', f'{agreement:.3f}', len(bucket_paths))
 
     overall_consensus, overall_agreement = combine_angles(
-        list(bucket_consensus.values()), [1.0] * len(bucket_consensus)
+        list(bucket_consensus.values()), list(bucket_weight.values())
     )
     logger.info('overall consensus across {} tilt angle(s): {}° (agreement: {})', len(bucket_consensus), f'{overall_consensus:.1f}', f'{overall_agreement:.3f}')
 
