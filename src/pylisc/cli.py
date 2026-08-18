@@ -137,23 +137,24 @@ def stack(
     '''
     Destripe a single MRC tilt-series stack, or a directory of them.
     '''
+    verbosity = 2 if verbosity >= 2 else verbosity
+    configure_logger(inputh_path.is_dir(), input_path, output_mrc, output_dir, verbosity)
+    logger.debug('running pylisc stack with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
+
+    if angular_width <= 0:
+        logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
+
     if input_path.is_dir():
         if output_dir is None:
             raise typer.BadParameter('--output-dir is required when input_path is a directory')
         if output_mrc is not None:
-            print(f'Ignoring argument: {output_mrc} (output filename)')
+            logger.warning('[batch mode] ignoring argument: {} (output filename)', output_mrc)
         if preview_strengths is not None:
-            print(f'Ignoring option: --preview-strengths {preview_strengths}')
-        is_dir = True
+            logger.warning('[batch mode] ignoring option: --preview-strengths {}', preview_strengths)
     else:
         if output_dir is not None:
-            print(f'Ignoring option: --output-dir {output_dir}')
-        is_dir = False
-    verbosity = 2 if verbosity >= 2 else verbosity
-
-    configure_logger(is_dir, input_path, output_mrc, output_dir, verbosity)
-    logger.debug('running pylisc stack with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
-
+            logger.warning('[single file mode] ignoring option: --output-dir {}', output_dir)
+    
     if mode == 'linear':
         logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')
 
@@ -223,6 +224,9 @@ def frames(
 
     configure_logger(True, input_path, None, output_dir, verbosity)
     logger.debug('running pylisc frames with: {}', ', '.join(f'{i[0]}: {i[1]}' for i in locals().items()))
+
+    if angular_width <= 0:
+        logger.error('angular width cannot be equal to or less than 0: {}', angular_width)
 
     if mode == 'linear':
         logger.warning('Linear destriping mode is deprecated and may be removed in future updates. Angular destriping is more effective and is the recommended destriping mode.')

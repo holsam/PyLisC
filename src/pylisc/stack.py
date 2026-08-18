@@ -48,6 +48,8 @@ def _process_series(
         if out_path.exists() and not force:
             logger.error('({}) output {} already exists: use --force to overwrite', path.name, out_path)
             raise FileExistsError(f'{out_path} already exists: use --force to overwrite')
+
+        logger.debug('({}) started processing', path.name)
         data, voxel_size = readMrcFile(path)
 
         # Resolve pixel size
@@ -61,6 +63,10 @@ def _process_series(
 
         # Resolve reference frame (use mid-frame as should be ok for both dose-symmetric & continuous acquisitions)
         if reference_frame is None:
+            resolved_reference_frame = len(data) // 2
+            logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
+        elif reference_frame > len(data):
+            logger.warning('({}) supplied reference frame index ({}) does not exist - defaulting to mid-frame')
             resolved_reference_frame = len(data) // 2
             logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
         else:
@@ -255,6 +261,7 @@ def _run_stack_batch(
             path = futures[future]
             try:
                 future.result()
-            except Exception:
-                logger.error('({}) failed during batch processing', path.name)
+            except Exception as e:
+                logger.error('({}) failed during batch processing: {}', path.name, e)
+                logger.debug('({}) traceback:', path.name, exc_info=e)
     logger.info('cleared mrc files written to {}', output_dir)

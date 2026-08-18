@@ -61,7 +61,7 @@ def run_frames(
     logger.info('processing {} files across {} workers', len(jobs), workers)
     if dry_run:
         for path, out_path, _ in jobs:
-            logger.info('[dry-run] would write {}', out_path)
+            logger.info('[dry-run] ({}) would write {}', path.name, out_path)
         return
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -84,7 +84,12 @@ def run_frames(
         }
         for future in as_completed(futures):
             path = futures[future]
-            future.result()  # re-raises worker exception in parent
+            try:
+                future.result()
+            except Exception as e:
+                logger.error('({}) failed during batch processing: {}', path.name, e)
+                logger.debug('({}) traceback:', path.name, exc_info=e)
+                continue
             logger.debug('({}) done', path.name)
 
     logger.info('cleared mrc files written to {}', output_dir)
@@ -104,20 +109,26 @@ def _process_one(
     force,
 ):
     with per_file_log(out_path.parent, out_path.stem):
-        data, voxel_size = readMrcFile(path)
-        cleared = lisc_clear_frame(
-            data[0],
-            decurtaining_mode=mode,
-            pixel_size_nm=pixel_size,
-            curtain_angle=curtain_angle,
-            apply_filter=apply_filter,
-            filter_threshold_nm=filter_threshold,
-            angular_width_deg=angular_width,
-            destripe_notch_fraction=notch_frac,
-            dc_protect_frac=dc_protect_frac,
-        )
-        writeMrcFile(cleared[np.newaxis, ...], voxel_size, out_path, force)
-        logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
+        logger.debug('({}) starting destriping', path.name)
+        try:
+            data, voxel_size = readMrcFile(path)
+            cleared = lisc_clear_frame(
+                data[0],
+                decurtaining_mode=mode,
+                pixel_size_nm=pixel_size,
+                curtain_angle=curtain_angle,
+                apply_filter=apply_filter,
+                filter_threshold_nm=filter_threshold,
+                angular_width_deg=angular_width,
+                destripe_notch_fraction=notch_frac,
+                dc_protect_frac=dc_protect_frac,
+            )
+            writeMrcFile(cleared[np.newaxis, ...], voxel_size, out_path, force)
+            logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
+        except Exception as e:
+            logger.error('({}) failed: {}', path.name, e)
+            logger.debug('({}) traceback: {}', path.name, exc_info=e)
+            raise
 
 
 def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
