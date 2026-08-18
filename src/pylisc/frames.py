@@ -143,11 +143,12 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
 
     # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus and the overall weighted average
     conf_values = np.array(list(confidences.values()))
-    if len(conf_values) >= 4:
-        q1, median_conf, q3 = np.percentile(conf_values, [25, 50, 75])
-        confidence_cap = median_conf + 1.5 * (q3 - q1)
+    if len(conf_values):
+        median_conf = np.median(conf_values)
+        mad = np.median(np.abs(conf_values - median_conf))
+        confidence_cap = median_conf + 3 * 1.4826 * mad if mad > 0 else median_conf * 5
     else:
-        confidence_cap = np.median(conf_values) * 5 if len(conf_values) else 0.0
+        confidence_cap = 0.0
     if confidence_cap > 0:
         n_clipped = sum(1 for c in confidences.values() if c > confidence_cap)
         if n_clipped:
