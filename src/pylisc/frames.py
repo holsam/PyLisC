@@ -141,6 +141,19 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
         angles[path] = angle
         logger.debug('({}) tilt {}° est. angle: {} (conf.: {})', path.name, tilt_of[path], angle, confidences[path])
 
+    # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus and the overall weighted average
+    conf_values = np.array(list(confidences.values()))
+    if len(conf_values) >= 4:
+        q1, median_conf, q3 = np.percentile(conf_values, [25, 50, 75])
+        confidence_cap = median_conf + 1.5 * (q3 - q1)
+    else:
+        confidence_cap = np.median(conf_values) * 5 if len(conf_values) else 0.0
+    if confidence_cap > 0:
+        n_clipped = sum(1 for c in confidences.values() if c > confidence_cap)
+        if n_clipped:
+            logger.debug('clipping {} frame(s) with confidence above {}', n_clipped, f'{confidence_cap:.2f}')
+        confidences = {p: min(c, confidence_cap) for p, c in confidences.items()}
+
     tilt_buckets = {}
     for path in paths:
         bucket = round(tilt_of[path])
@@ -156,7 +169,7 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
         )
         bucket_consensus[bucket] = consensus
         # High-tilt frames carry less signal (sample thickness grows ~1/cos(tilt)) so reduce weighting for overall consensus
-        bucket_weight[bucket] = sum(bucket_confidences) * np.cos(np.deg2rad(bucket))
+        bucket_weight[bucket] = np.median(bucket_confidences) * np.cos(np.deg2rad(bucket))
         logger.info('tilt {}°: consensus angle {}° (agreement: {}, n={})', bucket, f'{consensus:.1f}', f'{agreement:.3f}', len(bucket_paths))
 
     overall_consensus, overall_agreement = combine_angles(
