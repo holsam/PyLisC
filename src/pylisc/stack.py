@@ -61,16 +61,8 @@ def _process_series(
         if resolved_pixel_size <= 0:
             raise ValueError('Pixel size cannot be less than or equal to 0')
 
-        # Resolve reference frame (use mid-frame as should be ok for both dose-symmetric & continuous acquisitions)
-        if reference_frame is None:
-            resolved_reference_frame = len(data) // 2
-            logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
-        elif reference_frame > len(data):
-            logger.warning('({}) supplied reference frame index ({}) does not exist - defaulting to mid-frame')
-            resolved_reference_frame = len(data) // 2
-            logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
-        else:
-            resolved_reference_frame = reference_frame
+        # Resolve reference frame
+        resolved_reference_frame = _resolve_reference_frame(path, data, reference_frame)
 
         # Estimate curtaining angle if not provided
         if curtain_angle is None:
@@ -208,7 +200,7 @@ def _run_stack_batch(
         angles, confidences = [], []
         for path in series_paths:
             data, _ = readMrcFile(path)
-            frame_index = reference_frame if reference_frame is not None else len(data) // 2
+            frame_index = _resolve_reference_frame(path, data, reference_frame)
             frame = data[frame_index]
             angle, energy = estimate_curtain_angle(frame)
             median_energy = np.median(energy)
@@ -265,3 +257,17 @@ def _run_stack_batch(
                 logger.error('({}) failed during batch processing: {}', path.name, e)
                 logger.debug('({}) traceback:', path.name, exc_info=e)
     logger.info('cleared mrc files written to {}', output_dir)
+
+# -- _resolve_reference_frame: return the resolved reference frame, defaulting to mid-frame is no value provided or value is invalid 
+def _resolve_reference_frame(path, data, reference_frame):
+    # Resolve reference frame (use mid-frame as should be ok for both dose-symmetric & continuous acquisitions)
+    if reference_frame is None:
+        resolved_reference_frame = len(data) // 2
+        logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
+    elif reference_frame >= len(data):
+        logger.warning('({}) supplied reference frame index ({}) does not exist - defaulting to mid-frame', path.name, reference_frame)
+        resolved_reference_frame = len(data) // 2
+        logger.debug('({}) reference_frame defaulted to: {}', path.name, resolved_reference_frame)
+    else:
+        resolved_reference_frame = reference_frame
+    return resolved_reference_frame
