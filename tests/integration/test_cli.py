@@ -1,3 +1,8 @@
+'''
+PyLisC: integration tests for PyLisC CLI
+'''
+
+# Import external libraries
 from typer.testing import CliRunner
 from pylisc.cli import pylisc
 
@@ -14,6 +19,43 @@ class TestCliSingle:
         assert result.exit_code == 0
         assert (tmp_path / 'series_PyLisC_angular.mrc').exists()
         assert (tmp_path / 'series_PyLisC_angular.log').exists()
+   
+    def test_rerun_without_force_fails_then_succeeds_with_force(self, tmp_path):
+            from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
+            input_path = tmp_path / 'series.mrc'
+            write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=3, angle_deg=20))
+            out_path = tmp_path / 'series_PyLisC_angular.mrc'
+
+            first = runner.invoke(pylisc, ['stack', str(input_path), '--mode', 'angular'])
+            assert first.exit_code == 0
+            original_mtime = out_path.stat().st_mtime
+
+            rerun = runner.invoke(pylisc, ['stack', str(input_path), str(out_path), '--mode', 'angular'])
+            assert rerun.exit_code != 0
+            assert out_path.stat().st_mtime == original_mtime  # untouched
+
+            forced = runner.invoke(pylisc, ['stack', str(input_path), str(out_path), '--mode', 'angular', '--force'])
+            assert forced.exit_code == 0
+
+    def test_dry_run_writes_nothing(self, tmp_path):
+        from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=3, angle_deg=20))
+
+        result = runner.invoke(pylisc, ['stack', str(input_path), '--mode', 'angular', '--dry-run'])
+        assert result.exit_code == 0
+        assert not (tmp_path / 'series_PyLisC_angular.mrc').exists() 
+    
+    def test_reference_frame_at_series_length_is_rejected_cleanly(self, tmp_path):
+        from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=3, angle_deg=20))
+
+        result = runner.invoke(pylisc, [
+            'stack', str(input_path), '--mode', 'angular', '--reference-frame', '3',
+        ])
+        assert result.exit_code == 0
+        assert 'IndexError' not in result.output
 
 class TestCliBatch:
     def test_batch_run_with_outlier_warning(self, tmp_path):
@@ -32,7 +74,22 @@ class TestCliBatch:
         assert (output_dir / 'a_PyLisC_angular.mrc').exists()
         assert (output_dir / 'a_PyLisC_angular.log').exists()
 
-class TestCliPreview:
+    def test_batch_reference_frame_out_of_range_does_not_crash_whole_batch(self, tmp_path):
+        from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'cleared'
+        write_synthetic_mrc(input_dir / 'a.mrc', synthetic_tilt_series(n_tilts=5, angle_deg=20))
+        write_synthetic_mrc(input_dir / 'short.mrc', synthetic_tilt_series(n_tilts=2, angle_deg=20))
+
+        result = runner.invoke(pylisc, [
+            'stack', str(input_dir), '--mode', 'angular',
+            '--output-dir', str(output_dir), '--reference-frame', '4',
+        ])
+        assert result.exit_code == 0
+        assert (output_dir / 'a_PyLisC_angular.mrc').exists()
+
+class TestCliOptions:
     def test_preview_exits_without_full_run(self, tmp_path):
         from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
         stack = synthetic_tilt_series(n_tilts=3)
@@ -43,6 +100,16 @@ class TestCliPreview:
         assert result.exit_code == 0
         assert (tmp_path / 'destripe_strength_preview.tiff').exists()
         assert not (tmp_path / 'series_PyLisC_angular.mrc').exists()  # full run did NOT happen
+
+    def test_zero_angular_width_is_rejected(self, tmp_path):
+        from tests.fixtures import synthetic_tilt_series, write_synthetic_mrc
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=3, angle_deg=20))
+
+        result = runner.invoke(pylisc, [
+            'stack', str(input_path), '--mode', 'angular', '--angular-width', '0',
+        ])
+        assert result.exit_code != 0
 
 class TestCliFrames:
     def test_frames_run_groups_by_tilt_and_warns_on_outlier(self, tmp_path):
