@@ -233,7 +233,7 @@ def _run_stack_batch(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         jobs.append((path, out_path))
 
-    max_workers = os.cput_count()
+    max_workers = os.cpu_count()
     workers = max_workers if workers == 0 else min(workers, max_workers)
     
     logger.info('processing {} files across {} workers', len(jobs), workers)
