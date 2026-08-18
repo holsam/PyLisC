@@ -36,8 +36,8 @@ def write_synthetic_mrc(path, stack, pixel_size_nm=3.4):
         mrc.voxel_size = pixel_size_nm * 10  # nm -> Angstrom
 
 
-def write_synthetic_frame(path, angle_deg=0.0, pixel_size_nm=3.4, seed=0):
+def write_synthetic_frame(path, angle_deg=0.0, pixel_size_nm=3.4, seed=0, **frame_kwargs):
     '''
     Write a single synthetic 2D frame (as used in frames mode)
     '''
-    write_synthetic_mrc(path, synthetic_frame(angle_deg=angle_deg, seed=seed), pixel_size_nm=pixel_size_nm)
+    write_synthetic_mrc(path, synthetic_frame(angle_deg=angle_deg, seed=seed, **frame_kwargs), pixel_size_nm=pixel_size_nm)
