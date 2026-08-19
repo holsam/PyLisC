@@ -5,6 +5,8 @@ PyLisC: frames-mode processing
 # Import external libraries
 import numpy as np, os, typer
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from rich.console import Console
+from rich.table import Table
 
 # Import internal PyLisC modules
 from pylisc.estimate_angle import combine_angles, estimate_curtain_angle
@@ -31,6 +33,7 @@ def run_frames(
     force,
     dry_run,
     workers,
+    print_angles,
 ):
     if apply_filter and pixel_size is None:
         raise typer.BadParameter('--pixel-size is required when --apply-filter is set in frames mode (frame headers are not used for pixel size)')
@@ -44,7 +47,7 @@ def run_frames(
     tilt_of = {path: extract_tilt_angle(path.name, pattern) for path in paths}
 
     if curtain_angle is None:
-        angle_for_path = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold)
+        angle_for_path = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, print_angles)
     else:
         angle_for_path = {path: curtain_angle for path in paths}
 
@@ -131,7 +134,7 @@ def _process_one(
             raise
 
 
-def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
+def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, print_angles=False):
     angles, confidences = {}, {}
     for path in paths:
         data, _ = readMrcFile(path)
@@ -142,6 +145,7 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
         logger.debug('({}) tilt {}° est. angle: {} (conf.: {})', path.name, tilt_of[path], angle, confidences[path])
 
     # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus and the overall weighted average
+    raw_confidences = dict(confidences)
     conf_values = np.array(list(confidences.values()))
     if len(conf_values):
         median_conf = np.median(conf_values)
@@ -195,4 +199,63 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
             neighbor = min(good_buckets, key=lambda g: abs(g - bucket))
             resolved_consensus[bucket] = bucket_consensus[neighbor]
             logger.warning('tilt {}° consensus angle ({}°) deviates {}° from overall consensus ({}°) - using nearest reliable tilt {}°\'s angle ({}°) instead', bucket, f'{own_angle:.1f}', f'{deviation:.1f}', f'{overall_consensus:.1f}', neighbor, f'{bucket_consensus[neighbor]:.1f}')
+
+    if print_angles:
+        _print_angle_table(paths, tilt_of, angles, raw_confidences, confidences, bucket_consensus, bucket_weight, outlier_buckets, overall_consensus, overall_agreement)
+
     return {path: resolved_consensus[round(tilt_of[path])] for path in paths}
+
+def _print_angle_table(
+    paths,
+    tilt_of,
+    angles,
+    raw_confidences,
+    confidences,
+    bucket_consensus,
+    bucket_weight,
+    outlier_buckets,
+    overall_consensus,
+    overall_agreement
+):
+    console = Console()
+
+    per_file = Table(title='Per-file angle estimates')
+    per_file.add_column('file')
+    per_file.add_column('tilt', justify='right')
+    per_file.add_column('angle °', justify='right')
+    per_file.add_column('raw conf.', justify='right')
+    per_file.add_column('clipped conf.', justify='right')
+    per_file.add_column('bucket outlier?', justify='center')
+    for path in paths:
+        bucket = round(tilt_of[path])
+        raw_c, clipped_c = raw_confidences[path], confidences[path]
+        clipped_str = f'{clipped_c:.2f}' if clipped_c != raw_c else '-'
+        per_file.add_row(
+            path.name,
+            str(bucket),
+            f'{angles[path]:.1f}',
+            f'{raw_c:.2f}',
+            clipped_str,
+            'Y' if bucket in outlier_buckets else 'N',
+        )
+    console.print(per_file)
+
+    per_bucket = Table(title='Per-bucket & overall consensus')
+    per_bucket.add_column('tilt bucket', justify='right')
+    per_bucket.add_column('n', justify='right')
+    per_bucket.add_column('bucket consensus °', justify='right')
+    per_bucket.add_column('weight', justify='right')
+    per_bucket.add_column('outlier?', justify='center')
+    n_by_bucket = {}
+    for path in paths:
+        n_by_bucket[round(tilt_of[path])] = n_by_bucket.get(round(tilt_of[path]), 0) + 1
+    for bucket in sorted(bucket_consensus):
+        per_bucket.add_row(
+            str(bucket),
+            str(n_by_bucket[bucket]),
+            f'{bucket_consensus[bucket]:.1f}',
+            f'{bucket_weight[bucket]:.2f}',
+            'Y' if bucket in outlier_buckets else 'N',
+        )
+    per_bucket.add_row('OVERALL', '-', f'{overall_consensus:.1f}', '-', f'agreement={overall_agreement:.3f}')
+    console.print(per_bucket)
