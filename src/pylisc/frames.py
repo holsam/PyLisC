@@ -15,6 +15,8 @@ from pylisc.lisc import lisc_clear_frame
 from pylisc.log import logger, per_file_log
 from pylisc.templates import compile_template, extract_tilt_angle
 
+# Define dictionary of status colours (used by --print-angles)
+_STATUS_COLORS = {'seed': 'cyan', 'accepted': 'green', 'rejected': 'red'}
 
 def run_frames(
     input_dir,
@@ -171,9 +173,9 @@ def _split_series(tilt_buckets, tol_frac=0.5):
         series.extend(_split_by_tilt_gap(cluster, tol_frac))
     return series
 
-def _resolve_series(series_buckets, bucket_consensus, bucket_weight, angle_outlier_threshold, anchor_tilts) -> tuple[dict, dict]:
+def _resolve_series(series_buckets, bucket_consensus, angle_outlier_threshold, anchor_tilts) -> tuple[dict, dict]:
     '''
-    Seed a trusted angle from buckets around median tilt, and walk out to buckets, checking for agreement with seeded angle
+    Seed buckets around the median tilt, and walk out, checking each against the nearest already-resolved (seed/accepted) bucket
     '''
     buckets_sorted = sorted(series_buckets)
     if len(buckets_sorted) == 1:
@@ -191,30 +193,24 @@ def _resolve_series(series_buckets, bucket_consensus, bucket_weight, angle_outli
     seed_buckets = buckets_sorted[start:end]
     resolved = {b: bucket_consensus[b] for b in seed_buckets}
     status = {b: 'seed' for b in seed_buckets}
-    trusted, _ = combine_angles(
-        [bucket_consensus[b] for b in seed_buckets],
-        [bucket_weight[b] for b in seed_buckets],
-    )
-    trusted_weight = sum(bucket_weight[b] for b in seed_buckets)
 
-    for direction, idx in ((-1, start - 1), (1, end)):
+    for direction, idx, edge in ((-1, start - 1, start), (1, end, end - 1)):
+        nearest = resolved[buckets_sorted[edge]]
         i = idx
         while 0 <= i < len(buckets_sorted):
             b = buckets_sorted[i]
             own_angle = bucket_consensus[b]
-            deviation = min(abs(own_angle - trusted), 180 - abs(own_angle - trusted))
+            deviation = min(abs(own_angle - nearest), 180 - abs(own_angle - nearest))
             if deviation <= angle_outlier_threshold:
                 resolved[b] = own_angle
                 status[b] = 'accepted'
-                w = bucket_weight[b]
-                trusted, _ = combine_angles([trusted, own_angle], [trusted_weight, w])
-                trusted_weight += w
+                nearest = own_angle
             else:
-                resolved[b] = trusted
+                resolved[b] = nearest
                 status[b] = 'rejected'
                 logger.warning(
-                    "tilt {}° consensus angle ({}°) deviates {}° from local trusted angle ({}°) - using trusted angle instead",
-                    b, f'{own_angle:.1f}', f'{deviation:.1f}', f'{trusted:.1f}',
+                    "tilt {}° consensus angle ({}°) deviates {}° from nearest resolved angle ({}°) - using that angle instead",
+                    b, f'{own_angle:.1f}', f'{deviation:.1f}', f'{nearest:.1f}',
                 )
             i += direction
 
@@ -268,7 +264,7 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_ti
     series_of_bucket = {}
     status_of_bucket = {}
     for series_id, series_buckets in enumerate(series_list):
-        series_resolved, series_status = _resolve_series(series_buckets, bucket_consensus, bucket_weight, angle_outlier_threshold, anchor_tilts)
+        series_resolved, series_status = _resolve_series(series_buckets, bucket_consensus, angle_outlier_threshold, anchor_tilts)
         resolved_consensus.update(series_resolved)
         status_of_bucket.update(series_status)
         for b in series_buckets:
@@ -335,13 +331,14 @@ def _report_angle_estimates(
             writer = csv.writer(f)
             writer.writerow(['tilt bucket', 'n', 'bucket consensus °', 'resolved °', 'weight', 'status'])
             for bucket in buckets_sorted:
+                status = status_of_bucket[bucket]
                 table.add_row(
                     str(bucket),
                     str(n_by_bucket[bucket]),
                     f'{bucket_consensus[bucket]:.1f}',
                     f'{resolved_consensus[bucket]:.1f}',
                     f'{bucket_weight[bucket]:.2f}',
-                    status_of_bucket[bucket],
+                    f'[{_STATUS_COLORS[status]}]{status}[/{_STATUS_COLORS[status]}]',
                 )
                 writer.writerow([
                     str(bucket),
