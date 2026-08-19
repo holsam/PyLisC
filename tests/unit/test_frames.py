@@ -84,3 +84,16 @@ class TestEstimatePerTiltAngles:
         resolved = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold=15.0)
         # the low-tilt cluster should still win the overall consensus, not be outvoted by the single spiky frame
         assert resolved[tmp_path / 'low_0.mrc'] == pytest.approx(20, abs=1.0)
+
+    def test_print_angles_does_not_change_result(self, tmp_path):
+        paths, tilt_of = [], {}
+        # a reliable cluster around 0deg tilt, all striped at 50deg
+        for i, tilt in enumerate([-2, -1, 0, 1, 2]):
+            path = tmp_path / f'good_{i}.mrc'
+            write_synthetic_frame(path, angle_deg=50, seed=i)
+            paths.append(path)
+            tilt_of[path] = tilt
+        angle_outlier_threshold = 5.0
+        without_print = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, print_angles=False)
+        with_print = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, print_angles=True)
+        assert with_print == without_print
