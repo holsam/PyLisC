@@ -6,7 +6,7 @@ PyLisC: unit tests for input/output utilities
 import numpy as np, pytest
 
 # -- Import internal functions
-from pylisc.io import readMrcFile, writeMrcFile
+from pylisc.io import nameOutputFile, readMrcFile, writeMrcFile
 from pylisc.stack import _default_output_path
 
 class TestIo:
@@ -45,3 +45,21 @@ class TestIo:
         writeMrcFile(np.zeros((1, 4, 4), dtype=np.float32), 10.0, path, force=True)
         data, _ = readMrcFile(path)
         assert data.shape == (1, 4, 4)
+
+class TestIoNameOutputFile:
+    def test_no_collision_returns_base_name(self, tmp_path):
+        input_path = tmp_path / 'series.mrc'
+        input_path.touch()
+
+        out_path = nameOutputFile(input_path, mode='angular')
+
+        assert out_path == tmp_path / 'series_PyLisC_angular.mrc'
+
+    def test_collision_appends_numeric_suffix(self, tmp_path):
+        input_path = tmp_path / 'series.mrc'
+        input_path.touch()
+        (tmp_path / 'series_PyLisC_angular.mrc').touch()
+
+        out_path = nameOutputFile(input_path, mode='angular')
+
+        assert out_path == tmp_path / 'series_PyLisC_angular_1.mrc'
