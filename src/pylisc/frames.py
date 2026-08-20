@@ -220,6 +220,8 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_ti
     angles, confidences = {}, {}
     for path in paths:
         data, _ = readMrcFile(path)
+        if data is None:
+            continue
         angle, energy = estimate_curtain_angle(data[0])
         median_energy = np.median(energy)
         confidences[path] = energy.max() / median_energy if median_energy > 0 else 0.0

@@ -200,6 +200,8 @@ def _run_stack_batch(
         angles, confidences = [], []
         for path in series_paths:
             data, _ = readMrcFile(path)
+            if data is None:
+                continue
             frame_index = _resolve_reference_frame(path, data, reference_frame)
             frame = data[frame_index]
             angle, energy = estimate_curtain_angle(frame)
