@@ -119,17 +119,22 @@ class TestCliFrames:
         output_dir = tmp_path / 'cleared'
         template = '{}_{position}_{}_{tilt}_{}_{}_{}_{}_{}.mrc'
 
-        # two positions at matching nominal tilts, same striping angle
+        # three tilts, two positions each, all striped at the same angle
         write_synthetic_frame(input_dir / 'Position_1_1_-10.00_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=0)
         write_synthetic_frame(input_dir / 'Position_2_1_-9.98_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=1)
-        # a deliberate outlier at another tilt
-        write_synthetic_frame(input_dir / 'Position_1_2_0.00_20240101_1_Fractions_motion_corrected.mrc', angle_deg=65, seed=2)
+        write_synthetic_frame(input_dir / 'Position_1_2_0.00_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=3)
+        write_synthetic_frame(input_dir / 'Position_2_2_0.02_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=4)
+        write_synthetic_frame(input_dir / 'Position_1_3_10.00_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=0)
+        write_synthetic_frame(input_dir / 'Position_2_3_9.98_20240101_1_Fractions_motion_corrected.mrc', angle_deg=20, seed=1)
+        # a deliberate outlier at another tilt, past the anchor window
+        write_synthetic_frame(input_dir / 'Position_1_4_20.00_20240101_1_Fractions_motion_corrected.mrc', angle_deg=65, seed=2)
 
         result = runner.invoke(pylisc, [
             'frames', str(input_dir),
             '--output-dir', str(output_dir),
             '--filename-template', template,
             '--mode', 'angular',
+            '--anchor-tilts', '2',
         ])
         assert result.exit_code == 0
         assert 'WARNING' in result.output
