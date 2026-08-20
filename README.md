@@ -42,7 +42,7 @@ pylisc --help
 ```sh
 pylisc stack [OPTIONS] INPUT_MRC [OUTPUT_MRC]
 ```
-`OUTPUT_MRC` is optional. If omitted, it defaults to `INPUT_MRC` with a `_PyLisC_{mode}` suffix, saved to the same directory as `INPUT_MRC`. If that file already exists, a numeric suffix is appended instead of overwriting it.
+`OUTPUT_MRC` is optional. If omitted, it defaults to `INPUT_MRC` with a `_PyLisC_{mode}` suffix, saved to the same directory as `INPUT_MRC`. If that file already exists, a numeric suffix is appended instead of overwriting it (pass `--force` to overwrite in place instead).
 
 #### Options
 
@@ -57,7 +57,7 @@ Option | Default | Description
 --|--|--
 `-m`, `--mode` | `angular` | Destriping approach: `angular` (recommended) or `linear` (deprecated). See [Destriping mode](#destriping-mode) below.
 `--angle` | *(auto-estimated)* | Curtaining orientation, degrees from horizontal. Omit to estimate automatically from the tilt series' central frame[^estimation]; pass a value to override. A diagnostic plot is saved alongside the output when auto-estimated[^diagnosticplot].
-`--reference-frame` | `0` | Stack index used for angle estimation and the destriping preview. See [Choosing a reference frame](#choosing-a-reference-frame) for more information.
+`--reference-frame` | *(mid-stack index)* | Stack index used for angle estimation and the destriping preview. See [Choosing a reference frame](#choosing-a-reference-frame) for more information.
 `--angular-width` | `8.0` | Angular width of the destriping notch, in degrees. Only used when `--mode angular`. Narrower keeps more real structure sharing a nearby angle to the curtains, at the cost of weaker curtain removal.
 `--notch-fraction` | `0.03` | Width of the destriping notch, as a fraction of image width. Narrower removes less real signal running parallel to the curtains, but leaves more curtaining behind. Only used when `--mode linear`, which is deprecated.
 `--protect-fraction` | `0.01` | Fraction of image width around the zero-frequency (DC) origin exempted from destriping. See [Destriping mode](#destriping-mode) below for why this exists and its trade-off. Only used when `--mode linear`, which is deprecated.
@@ -66,7 +66,16 @@ Option | Default | Description
 Option | Default | Description
 --|--|--
 `--output-dir` | *(required for directory input)* | Output directory for batch mode, mirroring the input directory's structure.
-`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees. In `frames` mode, a tilt beyond this threshold also has its angle replaced with its nearest reliable tilt's angle, see [per-tilt curtain angle](#per-tilt-curtain-angle) for details.
+`--angle-outlier-threshold` | `5.0` | Warn if an individual series' own angle estimate differs from the batch consensus by more than this many degrees.
+`--workers` | `0` (all CPUs) | Number of parallel processes to use in batch mode.
+
+##### Other options
+Option | Default | Description
+--|--|--
+`--force` | - | Overwrite existing output files instead of erroring or auto-numbering.
+`--dry-run` | - | Print what would be processed/written, including the resolved angle and pixel size, without writing any output.
+`-v`, `--verbose` | - | Increase logging verbosity (repeat for more, e.g. `-vv`).
+
 #### Example
 ```sh
 # Run PyLisC, estimating the curtaining angle automatically
@@ -89,7 +98,7 @@ Before committing to a full run, different strength values can be previewed agai
 pylisc stack --preview-strengths 3,5,8,12,20 tilt_series.mrc
 ```
 
-This saves `destripe_strength_preview.tiff`, a side-by-side montage labelled with each value, and exits without processing the rest of the stack. Uses `--reference-frame` (see [below](#choosing-a-reference-frame)) as the preview frame.
+This saves `destripe_strength_preview.tiff`, a side-by-side montage labelled with each value, and exits without processing the rest of the stack. Uses `--reference-frame` (see [below](#choosing-a-reference-frame)) as the preview frame. Only applies in single-file mode; in batch mode it is ignored with a warning.
 
 ### Batch mode
 
@@ -123,7 +132,12 @@ pylisc frames [OPTIONS] --output-dir OUTPUT_DIR --filename-template TEMPLATE INP
 This command is aimed at destriping tilt images that exist as individual 2D MRC frames, i.e. not yet assembled/aligned into a stack. `INPUT_DIR` is not recursed into; every `*.mrc` directly inside it (excluding PyLisC's own `_PyLisC_` output) is treated as one tilt image. `--output-dir` is required, and mirrors the input's flat structure: each frame is written back out individually with a `_PyLisC_{mode}` suffix, same as `--output-dir` does for [batch mode](#batch-mode).
 
 #### Options
-`pylisc frames` uses many of the same options as `pylisc stack`, see [above](#options) or run `pylisc frames -h` for further information.
+`pylisc frames` uses many of the same options as `pylisc stack`, see [above](#options) or run `pylisc frames -h` for further information. Frames mode does not take `--reference-frame` or `--preview-strengths`, but adds:
+
+Option | Default | Description
+--|--|--
+`--anchor-tilts` | `5` | Number of tilt buckets nearest each series' median tilt used to seed its consensus walk. See [Per-tilt curtain angle](#per-tilt-curtain-angle) below.
+`--print-angles` | off | Print a diagnostic table of per-file and per-bucket angle estimation, and write it to CSV files in `--output-dir`.
 
 #### Filename template
 Since a flat directory has no per-series subdirectory to group frames by, PyLisC needs to know which filename field is the tilt angle. This is given as a template describing the delimited filename fields, with `{}` for fields to ignore and `{tilt}` (required) for the tilt angle field, e.g. for `Position_012_003_-30.00_20240115_1_Fractions_motion_corrected.mrc`:
@@ -143,11 +157,11 @@ Field boundaries default to underscore only. `--filename-delimiters` sets which 
 #### Per-tilt curtain angle
 Curtaining orientation drifts slightly with tilt angle, so unless `--angle` is given explicitly, frames mode does **not** use one consensus angle for the whole directory. Instead:
 1. Every frame's own angle is estimated.
-2. Frames are grouped by tilt angle, rounded to the nearest whole degree (so e.g. two positions' `-30.00°` and `-29.98°` tilts fall in the same group).
-3. Each frame's confidence ratio is clipped to a per-run cap before use, so a single sharp FFT peak can't dominate its group's consensus or the overall weighting below. The cap is the confidence distribution's median plus 3x its (scaled) median absolute deviation, which stays robust even with few frames (falling back to 5x the median when every value is identical, i.e. zero deviation).
-4. Each group's estimates are combined into a per-tilt consensus (same confidence-weighted circular mean as [batch mode](#shared-curtain-angle)), using the clipped confidences, which is the angle applied to every frame in that group.
-5. All per-tilt consensus angles are then combined into an overall consensus, weighted both by the group's typical (median) confidence and by `cos(tilt)` (sample thickness grows ~1/cos(tilt) so high tilt angles are less reliable), so they count for less than well-sampled low-tilt groups rather than skewing the overall consensus by an equal vote.
-6. Any per-tilt consensus that still deviates from the overall consensus by more than `--angle-outlier-threshold` is treated as unreliable, and will be destriped at the consensus angle of its nearest reliable tilt (by tilt-angle distance) instead, logging a warning naming both tilts. If every tilt ends up flagged, PyLisC falls back to the overall consensus for all of them.
+2. Each frame's confidence ratio is clipped to a per-run cap before use, so a single sharp FFT peak can't dominate its bucket's consensus. The cap is the confidence distribution's median plus 3x its (scaled) median absolute deviation, falling back to 5x the median when every value is identical, (i.e. zero deviation).
+3. Frames are grouped by tilt angle, rounded to the nearest whole degree (so e.g. two positions' `-30.00°` and `-29.98°` tilts fall in the same bucket), and each bucket's estimates are combined into a per-tilt consensus (the same confidence-weighted circular mean as [batch mode](#shared-curtain-angle)), using the clipped confidences.
+4. Tilt buckets are clustered into separate acquisition series (by matching frame count per bucket, then splitting wherever the tilt spacing breaks step), so a directory holding more than one tilt series is handled independently per series rather than as one pool.
+5. Within each series, the `--anchor-tilts` buckets around the series' median tilt are used as a trusted seed. PyLisC then walks outward from this seed, and compares each tilt bucket's own consensus to the nearest already-resolved bucket. A tilt bucket's consensus angle is accepted (becoming the new "nearest resolved" point) if it's within `--angle-outlier-threshold` degrees of it, otherwise it is replaced with that nearest resolved angle and logged as a warning naming both tilts. This approach prevents buckets with incorrect angles from throwing off subsequent tilts, while allowing for slight angle drift over a tilt series.
+6. Pass `--print-angles` to see the full per-file and per-bucket breakdown (angle, confidence, resolved angle, seed/accepted/rejected status) as tables and CSV files written to `--output-dir`.
 
 #### Pixel size
 Individual frame MRCs frequently lack a reliable pixel size in their header, so frames mode does not fall back to it. Pixel size is only needed for the optional high-pass filter — if `--apply-filter` is set, `--pixel-size` must be given explicitly, or PyLisC exits with an error.
@@ -184,7 +198,7 @@ The reference frame should be the tilt with the least foreshortening and the bes
 - **Dose-symmetric schemes** (0° acquired first, then alternating ±): use `--reference-frame 0`.
 - **Continuous sweeps** (most-negative tilt acquired first): 0° sits in the middle of the stack, so use roughly `--reference-frame <n//2>` for an n-tilt series.
 
-By default, the reference frame is taken as the middle of the stack, under the assumption that this will be correct for continous sweeps and workable for dose-symmetric schemes (vs using the first frame which would be correct for dose-symmetric but an extreme tilt angle for continous).
+By default, the reference frame is taken as the middle of the stack, under the assumption that this will be correct for continous sweeps and workable for dose-symmetric schemes (vs using the first frame which would be correct for dose-symmetric but an extreme tilt angle for continuous). An out-of-range `--reference-frame` falls back to this same default, with a warning.
 
 ### Limitations
 - **Directional filering:** Any real structure running parallel to the curtains shares the same Fourier orientation and is attenuated along with them, in both destriping modes. A narrower `--angular-width` (or `--notch-fraction` in linear mode) limits this but cannot eliminate it where curtains and genuine structure share an angle. Some loss of signal is likely to be observed for these structures.

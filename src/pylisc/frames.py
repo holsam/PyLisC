@@ -3,8 +3,10 @@ PyLisC: frames-mode processing
 '''
 
 # Import external libraries
-import numpy as np, os, typer
+import csv, numpy as np, os, typer
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from rich.console import Console
+from rich.table import Table
 
 # Import internal PyLisC modules
 from pylisc.estimate_angle import combine_angles, estimate_curtain_angle
@@ -13,6 +15,8 @@ from pylisc.lisc import lisc_clear_frame
 from pylisc.log import logger, per_file_log
 from pylisc.templates import compile_template, extract_tilt_angle
 
+# Define dictionary of status colours (used by --print-angles)
+_STATUS_COLORS = {'seed': 'cyan', 'accepted': 'green', 'rejected': 'red'}
 
 def run_frames(
     input_dir,
@@ -28,9 +32,11 @@ def run_frames(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    anchor_tilts,
     force,
     dry_run,
     workers,
+    print_angles,
 ):
     if apply_filter and pixel_size is None:
         raise typer.BadParameter('--pixel-size is required when --apply-filter is set in frames mode (frame headers are not used for pixel size)')
@@ -44,7 +50,7 @@ def run_frames(
     tilt_of = {path: extract_tilt_angle(path.name, pattern) for path in paths}
 
     if curtain_angle is None:
-        angle_for_path = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold)
+        angle_for_path = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_tilts, print_angles, output_dir)
     else:
         angle_for_path = {path: curtain_angle for path in paths}
 
@@ -130,18 +136,100 @@ def _process_one(
             logger.debug('({}) traceback: {}', path.name, exc_info=e)
             raise
 
+def _split_by_tilt_gap(bucket_list, tol_frac=0.5):
+    '''Split a sorted bucket list wherever the tilt spacing breaks from the list's own regular step (e.g. two disjoint tilt ranges that happen to share the same frame count)'''
+    if len(bucket_list) < 3:
+        return [bucket_list]
+    diffs = np.diff(bucket_list)
+    step = np.median(diffs)
+    runs, current = [], [bucket_list[0]]
+    for b, d in zip(bucket_list[1:], diffs):
+        if step > 0 and abs(d - step) > tol_frac * step:
+            runs.append(current)
+            current = [b]
+        else:
+            current.append(b)
+    runs.append(current)
+    return runs
 
-def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
+def _split_series(tilt_buckets, tol_frac=0.5):
+    '''
+    Cluster tilt buckets into acquisition series by:
+        1. Group by frame count
+        2. Split each group where tilt spacing does not have a regular step
+    '''
+    buckets_sorted = sorted(tilt_buckets)
+    n_by_bucket = {b: len(tilt_buckets[b]) for b in buckets_sorted}
+    distinct_n = sorted(set(n_by_bucket.values()))
+    n_groups = [[distinct_n[0]]]
+    for n in distinct_n[1:]:
+        if n - n_groups[-1][-1] <= 1:
+            n_groups[-1].append(n)
+        else:
+            n_groups.append([n])
+    series = []
+    for group in n_groups:
+        cluster = sorted(b for b in buckets_sorted if n_by_bucket[b] in group)
+        series.extend(_split_by_tilt_gap(cluster, tol_frac))
+    return series
+
+def _resolve_series(series_buckets, bucket_consensus, angle_outlier_threshold, anchor_tilts) -> tuple[dict, dict]:
+    '''
+    Seed buckets around the median tilt, and walk out, checking each against the nearest already-resolved (seed/accepted) bucket
+    '''
+    buckets_sorted = sorted(series_buckets)
+    if len(buckets_sorted) == 1:
+        b = buckets_sorted[0]
+        return {b: bucket_consensus[b]}, {b: 'seed'}
+
+    median_tilt = np.median(buckets_sorted)
+    center_idx = int(np.argmin([abs(b - median_tilt) for b in buckets_sorted]))
+    window = max(1, anchor_tilts)
+    half = window // 2
+    start = max(0, center_idx - half)
+    end = min(len(buckets_sorted), start + window)
+    start = max(0, end - window)
+
+    seed_buckets = buckets_sorted[start:end]
+    resolved = {b: bucket_consensus[b] for b in seed_buckets}
+    status = {b: 'seed' for b in seed_buckets}
+
+    for direction, idx, edge in ((-1, start - 1, start), (1, end, end - 1)):
+        nearest = resolved[buckets_sorted[edge]]
+        i = idx
+        while 0 <= i < len(buckets_sorted):
+            b = buckets_sorted[i]
+            own_angle = bucket_consensus[b]
+            deviation = min(abs(own_angle - nearest), 180 - abs(own_angle - nearest))
+            if deviation <= angle_outlier_threshold:
+                resolved[b] = own_angle
+                status[b] = 'accepted'
+                nearest = own_angle
+            else:
+                resolved[b] = nearest
+                status[b] = 'rejected'
+                logger.warning(
+                    "tilt {}° consensus angle ({}°) deviates {}° from nearest resolved angle ({}°) - using that angle instead",
+                    b, f'{own_angle:.1f}', f'{deviation:.1f}', f'{nearest:.1f}',
+                )
+            i += direction
+
+    return resolved, status
+
+def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_tilts=5, print_angles=False, output_dir=None):
     angles, confidences = {}, {}
     for path in paths:
         data, _ = readMrcFile(path)
+        if data is None:
+            continue
         angle, energy = estimate_curtain_angle(data[0])
         median_energy = np.median(energy)
         confidences[path] = energy.max() / median_energy if median_energy > 0 else 0.0
         angles[path] = angle
         logger.debug('({}) tilt {}° est. angle: {} (conf.: {})', path.name, tilt_of[path], angle, confidences[path])
 
-    # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus and the overall weighted average
+    # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus
+    raw_confidences = dict(confidences)
     conf_values = np.array(list(confidences.values()))
     if len(conf_values):
         median_conf = np.median(conf_values)
@@ -169,30 +257,98 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold):
             bucket_confidences,
         )
         bucket_consensus[bucket] = consensus
-        # High-tilt frames carry less signal (sample thickness grows ~1/cos(tilt)) so reduce weighting for overall consensus
+        # High-tilt frames carry less signal (sample thickness grows ~1/cos(tilt)) so reduce weighting within a series
         bucket_weight[bucket] = np.median(bucket_confidences) * np.cos(np.deg2rad(bucket))
         logger.info('tilt {}°: consensus angle {}° (agreement: {}, n={})', bucket, f'{consensus:.1f}', f'{agreement:.3f}', len(bucket_paths))
 
-    overall_consensus, overall_agreement = combine_angles(
-        list(bucket_consensus.values()), list(bucket_weight.values())
-    )
-    logger.info('overall consensus across {} tilt angle(s): {}° (agreement: {})', len(bucket_consensus), f'{overall_consensus:.1f}', f'{overall_agreement:.3f}')
+    series_list = _split_series(tilt_buckets)
+    resolved_consensus = {}
+    series_of_bucket = {}
+    status_of_bucket = {}
+    for series_id, series_buckets in enumerate(series_list):
+        series_resolved, series_status = _resolve_series(series_buckets, bucket_consensus, angle_outlier_threshold, anchor_tilts)
+        resolved_consensus.update(series_resolved)
+        status_of_bucket.update(series_status)
+        for b in series_buckets:
+            series_of_bucket[b] = series_id
+        logger.info('series {}: {} tilt bucket(s), tilts {}° to {}°', series_id, len(series_buckets), min(series_buckets), max(series_buckets))
 
-    outlier_buckets = set()
-    for bucket, angle in bucket_consensus.items():
-        deviation = min(abs(angle - overall_consensus), 180 - abs(angle - overall_consensus))
-        if deviation > angle_outlier_threshold:
-            outlier_buckets.add(bucket)
-    good_buckets = sorted(set(bucket_consensus) - outlier_buckets)
-    resolved_consensus = dict(bucket_consensus)
-    if not good_buckets:
-        logger.warning('every tilt bucket deviates from the overall consensus - no reliable tilt to fall back on, using overall consensus ({}°) for all', f'{overall_consensus:.1f}')
-        resolved_consensus = {bucket: overall_consensus for bucket in bucket_consensus}
-    else:
-        for bucket in outlier_buckets:
-            own_angle = bucket_consensus[bucket]
-            deviation = min(abs(own_angle - overall_consensus), 180 - abs(own_angle - overall_consensus))
-            neighbor = min(good_buckets, key=lambda g: abs(g - bucket))
-            resolved_consensus[bucket] = bucket_consensus[neighbor]
-            logger.warning('tilt {}° consensus angle ({}°) deviates {}° from overall consensus ({}°) - using nearest reliable tilt {}°\'s angle ({}°) instead', bucket, f'{own_angle:.1f}', f'{deviation:.1f}', f'{overall_consensus:.1f}', neighbor, f'{bucket_consensus[neighbor]:.1f}')
+    if print_angles:
+        _report_angle_estimates(output_dir, paths, tilt_of, angles, raw_confidences, confidences, bucket_consensus, bucket_weight, series_of_bucket, status_of_bucket, resolved_consensus, series_list)
+
     return {path: resolved_consensus[round(tilt_of[path])] for path in paths}
+
+def _report_angle_estimates(
+    output_dir,
+    paths,
+    tilt_of,
+    angles,
+    raw_confidences,
+    confidences,
+    bucket_consensus,
+    bucket_weight,
+    series_of_bucket,
+    status_of_bucket,
+    resolved_consensus,
+    series_list,
+):
+    # create output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # per-file estimates go to a CSV
+    csv_path = output_dir / 'per_file_angle_estimates.csv'
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['file', 'tilt_bucket', 'series', 'angle_deg', 'raw_confidence', 'clipped_confidence', 'bucket_status'])
+        for path in paths:
+            bucket = round(tilt_of[path])
+            writer.writerow([
+                path.name,
+                bucket,
+                series_of_bucket[bucket],
+                f'{angles[path]:.2f}',
+                f'{raw_confidences[path]:.3f}',
+                f'{confidences[path]:.3f}',
+                status_of_bucket[bucket],
+            ])
+    logger.info('per-file angle estimates written to {}', csv_path)
+
+    # per-tilt consensus is printed to stdout and csv
+    console = Console()
+    n_by_bucket = {}
+    for path in paths:
+        n_by_bucket[round(tilt_of[path])] = n_by_bucket.get(round(tilt_of[path]), 0) + 1
+    for series_id, series_buckets in enumerate(series_list):
+        series_csv_path = output_dir / f'per_tilt_angle_estimates_{series_id}.csv'
+        buckets_sorted = sorted(series_buckets)
+        seed_buckets = sorted(b for b in buckets_sorted if status_of_bucket[b] == 'seed')
+        table = Table(title=f'Series {series_id}: tilts {buckets_sorted[0]}° to {buckets_sorted[-1]}° (anchor: {seed_buckets})')
+        table.add_column('tilt bucket', justify='right')
+        table.add_column('n', justify='right')
+        table.add_column('bucket consensus °', justify='right')
+        table.add_column('resolved °', justify='right')
+        table.add_column('weight', justify='right')
+        table.add_column('status', justify='center')
+        with open(series_csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['tilt bucket', 'n', 'bucket consensus °', 'resolved °', 'weight', 'status'])
+            for bucket in buckets_sorted:
+                status = status_of_bucket[bucket]
+                table.add_row(
+                    str(bucket),
+                    str(n_by_bucket[bucket]),
+                    f'{bucket_consensus[bucket]:.1f}',
+                    f'{resolved_consensus[bucket]:.1f}',
+                    f'{bucket_weight[bucket]:.2f}',
+                    f'[{_STATUS_COLORS[status]}]{status}[/{_STATUS_COLORS[status]}]',
+                )
+                writer.writerow([
+                    str(bucket),
+                    str(n_by_bucket[bucket]),
+                    f'{bucket_consensus[bucket]:.1f}',
+                    f'{resolved_consensus[bucket]:.1f}',
+                    f'{bucket_weight[bucket]:.2f}',
+                    status_of_bucket[bucket],
+                ])
+        logger.info('per-tilt angle estimates for series {} written to {}', series_id, series_csv_path)
+        console.print(table)

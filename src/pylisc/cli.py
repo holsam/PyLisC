@@ -85,6 +85,14 @@ WorkersOpt = Annotated[
     int,
     typer.Option('--workers', help='Number of parallel processes to use in batch mode (0: all CPUs).', min=0, rich_help_panel='Batch options'),
 ]
+PrintAnglesOpt = Annotated[
+    bool,
+    typer.Option('--print-angles', help='Print a diagnostic table of per-file and per-bucket angle estimation (frames mode only).', rich_help_panel='Batch options', show_default=False),
+]
+AnchorTiltsOpt = Annotated[
+    int,
+    typer.Option('--anchor-tilts', help='Number of tilt buckets nearest each series\' median tilt used to seed its consensus walk (frames mode only).', rich_help_panel='Batch options', min=1),
+]
 
 # Define callback for pylisc (to allow version option)
 @pylisc.callback()
@@ -215,6 +223,8 @@ def frames(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    anchor_tilts: AnchorTiltsOpt = 5,
+    print_angles: PrintAnglesOpt = False,
     version: VersionOpt = None,
     workers: WorkersOpt = 0,
 ):
@@ -247,9 +257,11 @@ def frames(
         notch_frac=notch_frac,
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
+        anchor_tilts=anchor_tilts,
         force=force,
         dry_run=dry_run,
         workers=workers,
+        print_angles=print_angles,
     )
     logger.info('pylisc completed')
     raise typer.Exit()

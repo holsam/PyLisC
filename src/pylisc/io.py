@@ -6,6 +6,8 @@ PyLisC: import/output utilities
 import mrcfile, numpy as np
 from pathlib import Path
 
+# Import internal utilities
+from pylisc.log import logger
 
 def nameOutputFile(input_path, mode):
     base_stem = f'{input_path.stem}_PyLisC_{mode}'
@@ -20,12 +22,16 @@ def nameOutputFile(input_path, mode):
     return(output_mrc)
 
 def readMrcFile(path: Path):
-    with mrcfile.open(path, permissive=True) as mrc:
-        data = mrc.data.astype(np.float32)
-        voxel_size = mrc.voxel_size # in Ångstroms
-    if data.ndim == 2:
-        data = data[np.newaxis, ...]
-    return data, voxel_size
+    try:
+        with mrcfile.open(path, permissive=True) as mrc:
+            data = mrc.data.astype(np.float32)
+            voxel_size = mrc.voxel_size # in Ångstroms
+        if data.ndim == 2:
+            data = data[np.newaxis, ...]
+        return data, voxel_size
+    except ValueError as e:
+        logger.warning('({}) could not read MRC file, skipping', path)
+        return None, None
 
 def writeMrcFile(data, voxel_size, path: Path, force: bool = False):
     if path.exists() and not force:
