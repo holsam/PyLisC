@@ -1,12 +1,13 @@
 '''
-PyLisC: unit tests for per-tilt curtain angle consensus and outlier fallback
+PyLisC: unit tests for per-tilt curtain angle consensus and outlier fallback, and frames processing
 '''
 
 # Import external libraries
-import pytest
+import pytest, typer
 
 # Import internal functions
-from pylisc.frames import _estimate_per_tilt_angles
+from pylisc.frames import _estimate_per_tilt_angles,  _process_one, _split_by_tilt_gap, run_frames
+from pylisc.io import readMrcFile
 from pylisc.log import logger
 
 class TestEstimatePerTiltAngles:
@@ -120,3 +121,99 @@ class TestEstimatePerTiltAngles:
 
         assert resolved[tmp_path / f'drift_{tilts[0]}.mrc'] == pytest.approx(50, abs=1.5)
         assert resolved[tmp_path / f'drift_{tilts[-1]}.mrc'] == pytest.approx(62, abs=1.5)
+
+class TestProcessOne:
+    def test_writes_cleared_frame(self, tmp_path, write_synthetic_frame):
+        in_path = tmp_path / 'frame.mrc'
+        write_synthetic_frame(in_path, angle_deg=20)
+        out_path = tmp_path / 'out.mrc'
+
+        _process_one(
+            in_path, out_path, curtain_angle=20.0, mode='angular',
+            pixel_size=None, apply_filter=False, filter_threshold=5000.0,
+            angular_width=8.0, notch_frac=0.02, dc_protect_frac=0.01, force=False,
+        )
+
+        assert out_path.exists()
+        data, _ = readMrcFile(out_path)
+        assert data.shape[1:] == (512, 512)
+
+    def test_reraises_on_failure(self, tmp_path):
+        bad_path = tmp_path / 'not_real.mrc'
+        bad_path.write_bytes(b'not a real mrc file')
+        out_path = tmp_path / 'out.mrc'
+
+        with pytest.raises(Exception):
+            _process_one(
+                bad_path, out_path, curtain_angle=0.0, mode='angular',
+                pixel_size=None, apply_filter=False, filter_threshold=5000.0,
+                angular_width=8.0, notch_frac=0.02, dc_protect_frac=0.01, force=False,
+            )
+
+class TestSplitByTiltGap:
+    def test_short_list_returned_unsplit(self):
+        assert _split_by_tilt_gap([1, 2]) == [[1, 2]]
+
+class TestRunFramesEdgeCases:
+    def test_no_frame_files_raises(self, tmp_path):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+
+        with pytest.raises(typer.BadParameter, match='No frame files found'):
+            run_frames(
+                input_dir=input_dir, output_dir=tmp_path / 'out',
+                filename_template='{}_{tilt}.mrc', filename_delimiters='_',
+                mode='angular', apply_filter=False, filter_threshold=5000.0,
+                pixel_size=None, curtain_angle=None, angular_width=8.0,
+                notch_frac=0.02, dc_protect_frac=0.01, angle_outlier_threshold=5.0,
+                anchor_tilts=5, force=False, dry_run=False, workers=1, print_angles=False,
+            )
+
+    def test_explicit_curtain_angle_skips_estimation(self, tmp_path, write_synthetic_frame):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'out'
+        write_synthetic_frame(input_dir / 'a_0.00.mrc', angle_deg=20)
+
+        run_frames(
+            input_dir=input_dir, output_dir=output_dir,
+            filename_template='{}_{tilt}.mrc', filename_delimiters='_',
+            mode='angular', apply_filter=False, filter_threshold=5000.0,
+            pixel_size=None, curtain_angle=33.0, angular_width=8.0,
+            notch_frac=0.02, dc_protect_frac=0.01, angle_outlier_threshold=5.0,
+            anchor_tilts=5, force=False, dry_run=False, workers=1, print_angles=False,
+        )
+        assert (output_dir / 'a_0.00_PyLisC_angular.mrc').exists()
+
+    def test_dry_run_writes_nothing(self, tmp_path, write_synthetic_frame):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'out'
+        write_synthetic_frame(input_dir / 'a_0.00.mrc', angle_deg=20)
+
+        run_frames(
+            input_dir=input_dir, output_dir=output_dir,
+            filename_template='{}_{tilt}.mrc', filename_delimiters='_',
+            mode='angular', apply_filter=False, filter_threshold=5000.0,
+            pixel_size=None, curtain_angle=20.0, angular_width=8.0,
+            notch_frac=0.02, dc_protect_frac=0.01, angle_outlier_threshold=5.0,
+            anchor_tilts=5, force=False, dry_run=True, workers=1, print_angles=False,
+        )
+        assert not (output_dir / 'a_0.00_PyLisC_angular.mrc').exists()
+
+    def test_batch_one_bad_file_does_not_abort_others(self, tmp_path, write_synthetic_frame):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        output_dir = tmp_path / 'out'
+        write_synthetic_frame(input_dir / 'good_0.00.mrc', angle_deg=20)
+        (input_dir / 'bad_1.00.mrc').write_bytes(b'not a real mrc file')
+
+        run_frames(
+            input_dir=input_dir, output_dir=output_dir,
+            filename_template='{}_{tilt}.mrc', filename_delimiters='_',
+            mode='angular', apply_filter=False, filter_threshold=5000.0,
+            pixel_size=None, curtain_angle=20.0, angular_width=8.0,
+            notch_frac=0.02, dc_protect_frac=0.01, angle_outlier_threshold=5.0,
+            anchor_tilts=5, force=False, dry_run=False, workers=2, print_angles=False,
+        )
+        assert (output_dir / 'good_0.00_PyLisC_angular.mrc').exists()
