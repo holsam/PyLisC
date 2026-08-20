@@ -20,8 +20,7 @@ class TestIo:
 
         assert out_path == tmp_path / 'series_PyLisC_angular_2.mrc'
 
-    def test_write_then_read_roundtrip(self, tmp_path):
-        from tests.fixtures import synthetic_frame
+    def test_write_then_read_roundtrip(self, tmp_path, synthetic_frame):
         path = tmp_path / 'out.mrc'
         frame = synthetic_frame(size=64)[np.newaxis, ...]
 

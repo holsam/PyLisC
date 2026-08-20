@@ -8,10 +8,9 @@ import pytest
 # Import internal functions
 from pylisc.frames import _estimate_per_tilt_angles
 from pylisc.log import logger
-from tests.fixtures import write_synthetic_frame
 
 class TestEstimatePerTiltAngles:
-    def test_overall_consensus_favors_low_tilt_over_high_tilt(self, tmp_path):
+    def test_overall_consensus_favors_low_tilt_over_high_tilt(self, tmp_path, write_synthetic_frame):
         paths, tilt_of = [], {}
         for i, tilt in enumerate([0, 1, 2]):
             path = tmp_path / f'low_{i}.mrc'
@@ -28,7 +27,7 @@ class TestEstimatePerTiltAngles:
         assert low_tilt_consensus == pytest.approx(20, abs=1.0)
 
 
-    def test_walk_rejects_bucket_that_deviates_from_trusted_neighbor(self, tmp_path):
+    def test_walk_rejects_bucket_that_deviates_from_trusted_neighbor(self, tmp_path, write_synthetic_frame):
         paths, tilt_of = [], {}
         # a reliable run around the median tilt, all striped at 50deg
         for i, tilt in enumerate([-2, -1, 0, 1, 2]):
@@ -53,7 +52,7 @@ class TestEstimatePerTiltAngles:
         assert resolved[bad_path] == pytest.approx(50, abs=2.0)
         assert any('deviates' in str(m) and 'nearest resolved angle' in str(m) for m in messages)
 
-    def test_confidence_spike_does_not_skew_overall_consensus(self, tmp_path):
+    def test_confidence_spike_does_not_skew_overall_consensus(self, tmp_path, write_synthetic_frame):
         paths, tilt_of = [], {}
         # a consistent low-tilt cluster, all striped at 20deg with ordinary confidence
         for i, tilt in enumerate([-10, 0, 10]):
@@ -71,7 +70,7 @@ class TestEstimatePerTiltAngles:
         # the low-tilt cluster should still win the overall consensus, not be outvoted by the single spiky frame
         assert resolved[tmp_path / 'low_0.mrc'] == pytest.approx(20, abs=1.0)
 
-    def test_print_angles_does_not_change_result(self, tmp_path):
+    def test_print_angles_does_not_change_result(self, tmp_path, write_synthetic_frame):
         paths, tilt_of = [], {}
         # a reliable cluster around 0deg tilt, all striped at 50deg
         for i, tilt in enumerate([-2, -1, 0, 1, 2]):
@@ -84,7 +83,7 @@ class TestEstimatePerTiltAngles:
         with_print = _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, print_angles=True, anchor_tilts=5, output_dir=tmp_path)
         assert with_print == without_print
 
-    def test_series_with_different_pretilt_are_resolved_independently(self, tmp_path):
+    def test_series_with_different_pretilt_are_resolved_independently(self, tmp_path, write_synthetic_frame):
             paths, tilt_of = [], {}
             # main series: 3 frames per tilt, regular 3deg step, striped at 55deg
             for tilt in range(-6, 7, 3):
@@ -106,7 +105,7 @@ class TestEstimatePerTiltAngles:
             assert resolved[tmp_path / 'main_0_0.mrc'] == pytest.approx(55, abs=1.0)
             assert resolved[tmp_path / 'sparse_1.mrc'] == pytest.approx(-20, abs=1.0)
 
-    def test_walk_tracks_gradual_angle_drift_with_tilt(self, tmp_path):
+    def test_walk_tracks_gradual_angle_drift_with_tilt(self, tmp_path, write_synthetic_frame):
         paths, tilt_of = [], {}
         tilts = list(range(-9, 10, 3))
         for i, tilt in enumerate(tilts):

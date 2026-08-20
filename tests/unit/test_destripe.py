@@ -4,7 +4,6 @@ PyLisC: unit tests for destriping
 
 # Import internal functions
 from pylisc.destripe import directional_destripe_angular, directional_destripe_linear
-from tests.fixtures import synthetic_frame
 
 class TestDestripe:
     def retained_fraction(self, clean_component, angle_deg, destripe_fn, **kwargs):
@@ -32,10 +31,9 @@ class TestDestripe:
         kept = self.retained_fraction(large_scale, -65, directional_destripe_linear, notch_frac=0.02, dc_protect_frac=0.0)
         assert kept < 0.2
 
-    def test_zero_angular_width_does_not_produce_nan(self):
+    def test_zero_angular_width_does_not_produce_nan(self, synthetic_frame):
         import numpy as np
         from pylisc.destripe import directional_destripe_angular
-        from tests.fixtures import synthetic_frame
         frame = synthetic_frame(size=64, angle_deg=20)
 
         result = directional_destripe_angular(frame, angle_deg=20, angular_width_deg=0)
