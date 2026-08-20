@@ -10,6 +10,16 @@ class TestDestripe:
         out = destripe_fn(clean_component, angle_deg=angle_deg, **kwargs)
         return out.std() / clean_component.std()
 
+    def test_linear_mode_dc_protect_preserves_low_frequencies(self):
+        from scipy import ndimage as ndi
+        import numpy as np
+        rng = np.random.default_rng(5)
+        large_scale = (ndi.gaussian_filter(rng.normal(0, 1, (1024, 1024)), sigma=60) * 200).astype('float32')
+
+        kept_without_protect = self.retained_fraction(large_scale, -65, directional_destripe_linear, notch_frac=0.02, dc_protect_frac=0.0)
+        kept_with_protect = self.retained_fraction(large_scale, -65, directional_destripe_linear, notch_frac=0.02, dc_protect_frac=0.05)
+        assert kept_with_protect > kept_without_protect
+
     def test_angular_mode_decouples_from_curtain_period(self):
         # Passing large-scale/fine components through ALONE isolates the filter's effect on each, since it's linear
         from scipy import ndimage as ndi
