@@ -146,3 +146,70 @@ class TestCliFrames:
         ])
         assert result.exit_code != 0
         assert '--pixel-size' in result.output
+
+class TestCliVersionAndWarnings:
+    def test_version_flag_prints_and_exits(self):
+        result = runner.invoke(pylisc, ['--version'])
+        assert result.exit_code == 0
+        assert 'PyLisC version' in result.output
+
+    def test_linear_mode_warns_deprecated(self, tmp_path, synthetic_tilt_series, write_synthetic_mrc):
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=2, angle_deg=20))
+
+        result = runner.invoke(pylisc, ['stack', str(input_path), '--mode', 'linear'])
+        assert result.exit_code == 0
+        assert 'deprecated' in result.output
+
+    def test_single_file_mode_warns_on_ignored_output_dir(self, tmp_path, synthetic_tilt_series, write_synthetic_mrc):
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=2, angle_deg=20))
+
+        result = runner.invoke(pylisc, [
+            'stack', str(input_path), '--mode', 'angular',
+            '--output-dir', str(tmp_path / 'ignored'),
+        ])
+        assert result.exit_code == 0
+        assert 'ignoring option: --output-dir' in result.output
+
+    def test_batch_mode_warns_on_ignored_output_arg_and_preview(self, tmp_path, synthetic_tilt_series, write_synthetic_mrc):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        write_synthetic_mrc(input_dir / 'a.mrc', synthetic_tilt_series(n_tilts=2, angle_deg=20))
+
+        result = runner.invoke(pylisc, [
+            'stack', str(input_dir), str(tmp_path / 'ignored_out.mrc'),
+            '--mode', 'angular', '--output-dir', str(tmp_path / 'cleared'),
+            '--preview-strengths', '3,8',
+        ])
+        assert result.exit_code == 0
+        assert 'ignoring argument' in result.output
+        assert 'ignoring option: --preview-strengths' in result.output
+
+class TestCliFramesOptions:
+    def test_zero_angular_width_is_rejected(self, tmp_path, write_synthetic_frame):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        write_synthetic_frame(input_dir / 'a_0.00.mrc', angle_deg=20)
+
+        result = runner.invoke(pylisc, [
+            'frames', str(input_dir),
+            '--output-dir', str(tmp_path / 'cleared'),
+            '--filename-template', '{}_{tilt}.mrc',
+            '--angular-width', '0',
+        ])
+        assert result.exit_code != 0
+
+    def test_linear_mode_warns_deprecated(self, tmp_path, write_synthetic_frame):
+        input_dir = tmp_path / 'raw'
+        input_dir.mkdir()
+        write_synthetic_frame(input_dir / 'a_0.00.mrc', angle_deg=20)
+
+        result = runner.invoke(pylisc, [
+            'frames', str(input_dir),
+            '--output-dir', str(tmp_path / 'cleared'),
+            '--filename-template', '{}_{tilt}.mrc',
+            '--mode', 'linear',
+        ])
+        assert result.exit_code == 0
+        assert 'deprecated' in result.output
