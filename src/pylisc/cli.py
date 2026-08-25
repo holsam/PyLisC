@@ -91,7 +91,7 @@ PrintAnglesOpt = Annotated[
 ]
 AnchorTiltsOpt = Annotated[
     int,
-    typer.Option('--anchor-tilts', help='Number of tilt buckets nearest each series\' median tilt used to seed its consensus walk (frames mode only).', rich_help_panel='Batch options', min=1),
+    typer.Option('--anchor-tilts', help='Number of tilt buckets (frames mode) or frames (stack mode) nearest the median/reference used to seed the angle consensus walk.', rich_help_panel='Batch options', min=1),
 ]
 
 # Define callback for pylisc (to allow version option)
@@ -139,6 +139,7 @@ def stack(
     notch_frac: NotchFracOpt = 0.03,
     dc_protect_frac: DcProtectFracOpt = 0.01,
     angle_outlier_threshold: AngleOutlierThresholdOpt = 5.0,
+    anchor_tilts: AnchorTiltsOpt = 5,
     version: VersionOpt = None,
     workers: WorkersOpt = 0,
 ):
@@ -181,6 +182,7 @@ def stack(
         notch_frac=notch_frac,
         dc_protect_frac=dc_protect_frac,
         angle_outlier_threshold=angle_outlier_threshold,
+        anchor_tilts=anchor_tilts,
         preview_strengths=preview_strengths,
         force=force,
         dry_run=dry_run,
