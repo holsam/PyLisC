@@ -89,6 +89,54 @@ def plot_angular_energy(
     plt.close(fig)
     return output_path
 
+def clip_confidence_outliers(confidences: dict) -> dict:
+    '''
+    Cap confidences above a median+MAD threshold so a single spuriously sharp FFT peak can't dominate a consensus
+    '''
+    conf_values = np.array(list(confidences.values()))
+    if len(conf_values) == 0:
+        return dict(confidences)
+    median_conf = np.median(conf_values)
+    mad = np.median(np.abs(conf_values - median_conf))
+    confidence_cap = median_conf + 3 * 1.4826 * mad if mad > 0 else median_conf * 5
+    if confidence_cap <= 0:
+        return dict(confidences)
+    return {k: min(v, confidence_cap) for k, v in confidences.items()}
+
+def resolve_walk(keys_sorted: list, values: dict, angle_outlier_threshold: float, anchor_window: int) -> tuple[dict, dict]:
+    '''
+    Seed a window of keys around the median key, and walk outward, checking each key's own value against the nearest already-resolved (seed/accepted) value
+    '''
+    if len(keys_sorted) == 1:
+        k = keys_sorted[0]
+        return {k: values[k]}, {k: 'seed'}
+    median_key = np.median(keys_sorted)
+    center_idx = int(np.argmin([abs(k - median_key) for k in keys_sorted]))
+    window = max(1, anchor_window)
+    half = window // 2
+    start = max(0, center_idx - half)
+    end = min(len(keys_sorted), start + window)
+    start = max(0, end - window)
+    seed_keys = keys_sorted[start:end]
+    resolved = {k: values[k] for k in seed_keys}
+    status = {k: 'seed' for k in seed_keys}
+    for direction, idx, edge in ((-1, start - 1, start), (1, end, end - 1)):
+        nearest = resolved[keys_sorted[edge]]
+        i = idx
+        while 0 <= i < len(keys_sorted):
+            k = keys_sorted[i]
+            own_value = values[k]
+            deviation = min(abs(own_value - nearest), 180 - abs(own_value - nearest))
+            if deviation <= angle_outlier_threshold:
+                resolved[k] = own_value
+                status[k] = 'accepted'
+                nearest = own_value
+            else:
+                resolved[k] = nearest
+                status[k] = 'rejected'
+            i += direction
+    return resolved, status
+
 def combine_angles(angles_deg: list, confidences: list) -> tuple:
     '''
     Confidence-weighted circular mean of curtain angles

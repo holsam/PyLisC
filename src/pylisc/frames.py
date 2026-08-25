@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 # Import internal PyLisC modules
-from pylisc.estimate_angle import combine_angles, estimate_curtain_angle
+from pylisc.estimate_angle import clip_confidence_outliers, combine_angles, estimate_curtain_angle, resolve_walk
 from pylisc.io import find_input_files, readMrcFile, writeMrcFile
 from pylisc.lisc import lisc_clear_frame
 from pylisc.log import logger, per_file_log
@@ -178,42 +178,14 @@ def _resolve_series(series_buckets, bucket_consensus, angle_outlier_threshold, a
     Seed buckets around the median tilt, and walk out, checking each against the nearest already-resolved (seed/accepted) bucket
     '''
     buckets_sorted = sorted(series_buckets)
-    if len(buckets_sorted) == 1:
-        b = buckets_sorted[0]
-        return {b: bucket_consensus[b]}, {b: 'seed'}
-
-    median_tilt = np.median(buckets_sorted)
-    center_idx = int(np.argmin([abs(b - median_tilt) for b in buckets_sorted]))
-    window = max(1, anchor_tilts)
-    half = window // 2
-    start = max(0, center_idx - half)
-    end = min(len(buckets_sorted), start + window)
-    start = max(0, end - window)
-
-    seed_buckets = buckets_sorted[start:end]
-    resolved = {b: bucket_consensus[b] for b in seed_buckets}
-    status = {b: 'seed' for b in seed_buckets}
-
-    for direction, idx, edge in ((-1, start - 1, start), (1, end, end - 1)):
-        nearest = resolved[buckets_sorted[edge]]
-        i = idx
-        while 0 <= i < len(buckets_sorted):
-            b = buckets_sorted[i]
-            own_angle = bucket_consensus[b]
-            deviation = min(abs(own_angle - nearest), 180 - abs(own_angle - nearest))
-            if deviation <= angle_outlier_threshold:
-                resolved[b] = own_angle
-                status[b] = 'accepted'
-                nearest = own_angle
-            else:
-                resolved[b] = nearest
-                status[b] = 'rejected'
-                logger.warning(
-                    "tilt {}° consensus angle ({}°) deviates {}° from nearest resolved angle ({}°) - using that angle instead",
-                    b, f'{own_angle:.1f}', f'{deviation:.1f}', f'{nearest:.1f}',
-                )
-            i += direction
-
+    resolved, status = resolve_walk(buckets_sorted, bucket_consensus, angle_outlier_threshold, anchor_tilts)
+    for b in buckets_sorted:
+        if status[b] == 'rejected':
+            deviation = min(abs(bucket_consensus[b] - resolved[b]), 180 - abs(bucket_consensus[b] - resolved[b]))
+            logger.warning(
+                "tilt {}° consensus angle ({}°) deviates {}° from nearest resolved angle ({}°) - using that angle instead",
+                b, f'{bucket_consensus[b]:.1f}', f'{deviation:.1f}', f'{resolved[b]:.1f}',
+            )
     return resolved, status
 
 def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_tilts=5, print_angles=False, output_dir=None):
@@ -230,18 +202,10 @@ def _estimate_per_tilt_angles(paths, tilt_of, angle_outlier_threshold, anchor_ti
 
     # A single spuriously sharp FFT peak can otherwise dominate its bucket's consensus
     raw_confidences = dict(confidences)
-    conf_values = np.array(list(confidences.values()))
-    if len(conf_values):
-        median_conf = np.median(conf_values)
-        mad = np.median(np.abs(conf_values - median_conf))
-        confidence_cap = median_conf + 3 * 1.4826 * mad if mad > 0 else median_conf * 5
-    else:
-        confidence_cap = 0.0
-    if confidence_cap > 0:
-        n_clipped = sum(1 for c in confidences.values() if c > confidence_cap)
-        if n_clipped:
-            logger.debug('clipping {} frame(s) with confidence above {}', n_clipped, f'{confidence_cap:.2f}')
-        confidences = {p: min(c, confidence_cap) for p, c in confidences.items()}
+    confidences = clip_confidence_outliers(confidences)
+    n_clipped = sum(1 for p in confidences if confidences[p] < raw_confidences[p])
+    if n_clipped:
+        logger.debug('clipping {} frame(s) with confidence above cap', n_clipped)
 
     tilt_buckets = {}
     for path in paths:

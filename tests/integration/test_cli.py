@@ -53,6 +53,14 @@ class TestCliSingle:
         assert result.exit_code == 0
         assert 'IndexError' not in result.output
 
+    def test_anchor_tilts_accepted_for_per_frame_walk(self, tmp_path, synthetic_tilt_series, write_synthetic_mrc):
+        input_path = tmp_path / 'series.mrc'
+        write_synthetic_mrc(input_path, synthetic_tilt_series(n_tilts=3, angle_deg=20))
+
+        result = runner.invoke(pylisc, ['stack', str(input_path), '--mode', 'angular', '--anchor-tilts', '2'])
+        assert result.exit_code == 0
+        assert (tmp_path / 'series_PyLisC_angular.mrc').exists()
+
 class TestCliBatch:
     def test_batch_run_with_outlier_warning(self, tmp_path, synthetic_tilt_series, write_synthetic_mrc):
         input_dir = tmp_path / 'raw'

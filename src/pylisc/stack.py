@@ -8,7 +8,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 # Import internal PyLisC modules
-from pylisc.estimate_angle import combine_angles, estimate_curtain_angle, plot_angular_energy
+from pylisc.estimate_angle import clip_confidence_outliers, combine_angles, estimate_curtain_angle, plot_angular_energy, resolve_walk
 from pylisc.io import find_input_files, readMrcFile, writeMrcFile
 from pylisc.lisc import lisc_clear_frame
 from pylisc.log import logger, per_file_log
@@ -40,6 +40,8 @@ def _process_series(
     angular_width,
     notch_frac,
     dc_protect_frac,
+    angle_outlier_threshold,
+    anchor_tilts,
     force,
     dry_run,
     preview_strengths=None,
@@ -66,14 +68,14 @@ def _process_series(
 
         # Estimate curtaining angle if not provided
         if curtain_angle is None:
-            resolved_angle, angular_energy = estimate_curtain_angle(data[resolved_reference_frame])
-            if not dry_run:
-                plot_angular_energy(angular_energy, resolved_angle, output_dir=out_path.parent)
-            median_energy = np.median(angular_energy)
-            confidence = angular_energy.max() / median_energy if median_energy > 0 else 0.0
-            logger.info('({}) estimated curtaining angle: {}° (confidence: {})', path.name, resolved_angle, confidence)
+            per_frame_angle = _estimate_per_frame_angles(
+                path, data, resolved_reference_frame, angle_outlier_threshold, anchor_tilts, out_path.parent, dry_run,
+            )
+            resolved_angle = per_frame_angle[resolved_reference_frame]
+            logger.info('({}) reference frame ({}) resolved curtaining angle: {}°', path.name, resolved_reference_frame, resolved_angle)
         else:
             resolved_angle = curtain_angle
+            per_frame_angle = None
 
         if dry_run:
             logger.info('({}) [dry-run] would write to {} (angle: {}°, pixel size: {})', path.name, out_path, resolved_angle, resolved_pixel_size)
@@ -97,14 +99,14 @@ def _process_series(
             logger.info('Strength preview saved to {}', preview_path)
             return None
 
-        # Apply LisC to each frame
+        # Apply LisC to each frame, using each frame's own resolved angle when estimated
         cleared_stack = np.empty_like(data, dtype=np.float32)
         for i, frame in enumerate(data):
             cleared_stack[i] = lisc_clear_frame(
                 frame,
                 decurtaining_mode=mode,
                 pixel_size_nm=resolved_pixel_size,
-                curtain_angle=resolved_angle,
+                curtain_angle=per_frame_angle[i] if per_frame_angle is not None else resolved_angle,
                 apply_filter=apply_filter,
                 filter_threshold_nm=filter_threshold,
                 angular_width_deg=angular_width,
@@ -115,6 +117,36 @@ def _process_series(
         writeMrcFile(cleared_stack, voxel_size, out_path, force)
         logger.debug('({}) cleared mrc file wrote to {}', path.name, out_path)
         return resolved_angle
+
+
+def _estimate_per_frame_angles(path, data, resolved_reference_frame, angle_outlier_threshold, anchor_tilts, output_dir, dry_run):
+    '''
+    Estimate a curtain angle for every frame in a stack, then walk out from the reference frame accepting each frame's own
+    estimate only if it's within angle_outlier_threshold of its nearest already-resolved neighbor (frame index is already
+    tilt-ordered in an MRC stack, so neighboring frames should carry similar angles)
+    '''
+    angles = {}
+    ref_energy = None
+    for i, frame in enumerate(data):
+        angle, energy = estimate_curtain_angle(frame)
+        angles[i] = angle
+        if i == resolved_reference_frame:
+            ref_energy = energy
+        logger.debug('({}) frame {} est. angle: {}', path.name, i, angle)
+
+    if not dry_run and ref_energy is not None:
+        plot_angular_energy(ref_energy, angles[resolved_reference_frame], output_dir=output_dir)
+
+    frame_indices = list(range(len(data)))
+    resolved, status = resolve_walk(frame_indices, angles, angle_outlier_threshold, anchor_tilts)
+    for i in frame_indices:
+        if status[i] == 'rejected':
+            deviation = min(abs(angles[i] - resolved[i]), 180 - abs(angles[i] - resolved[i]))
+            logger.warning(
+                "({}) frame {} angle ({}°) deviates {}° from nearest resolved angle ({}°) - using that angle instead",
+                path.name, i, f'{angles[i]:.1f}', f'{deviation:.1f}', f'{resolved[i]:.1f}',
+            )
+    return resolved
 
 
 def run_stack(
@@ -131,6 +163,7 @@ def run_stack(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    anchor_tilts,
     force,
     dry_run,
     workers,
@@ -150,6 +183,7 @@ def run_stack(
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
             angle_outlier_threshold=angle_outlier_threshold,
+            anchor_tilts=anchor_tilts,
             force=force,
             dry_run=dry_run,
             workers=workers,
@@ -168,6 +202,8 @@ def run_stack(
             angular_width=angular_width,
             notch_frac=notch_frac,
             dc_protect_frac=dc_protect_frac,
+            angle_outlier_threshold=angle_outlier_threshold,
+            anchor_tilts=anchor_tilts,
             preview_strengths=preview_strengths,
             force=force,
             dry_run=dry_run,
@@ -187,6 +223,7 @@ def _run_stack_batch(
     notch_frac,
     dc_protect_frac,
     angle_outlier_threshold,
+    anchor_tilts,
     force,
     dry_run,
     workers,
@@ -197,7 +234,9 @@ def _run_stack_batch(
     logger.info('{} files found in {}', len(series_paths), input_dir)
 
     if curtain_angle is None:
-        angles, confidences = [], []
+        # Each stack is its own independent acquisition, so its own per-frame estimate is used for processing (below).
+        # This pass is diagnostic only: a reference-frame consensus across files, to warn on stacks that stand out.
+        angles, confidences = {}, {}
         for path in series_paths:
             data, _ = readMrcFile(path)
             if data is None:
@@ -206,20 +245,21 @@ def _run_stack_batch(
             frame = data[frame_index]
             angle, energy = estimate_curtain_angle(frame)
             median_energy = np.median(energy)
-            confidence = energy.max() / median_energy if median_energy > 0 else 0.0
-            angles.append(angle); confidences.append(confidence)
-            logger.debug('({}) est. angle: {} (conf.: {})', path.name, angle, confidence)
+            confidences[path] = energy.max() / median_energy if median_energy > 0 else 0.0
+            angles[path] = angle
+            logger.debug('({}) est. angle: {} (conf.: {})', path.name, angle, confidences[path])
 
-        consensus_angle, agreement = combine_angles(angles, confidences)
+        # A single spuriously sharp FFT peak can otherwise dominate the batch consensus
+        clipped_confidences = clip_confidence_outliers(confidences)
+
+        consensus_angle, agreement = combine_angles(list(angles.values()), list(clipped_confidences.values()))
         logger.info('batch consensus angle: {}° (agreement: {})', f'{consensus_angle:.1f}', f'{agreement:.3f}')
 
-        for path, angle in zip(series_paths, angles):
+        for path, angle in angles.items():
             deviation = min(abs(angle - consensus_angle), 180 - abs(angle - consensus_angle))
             if deviation > angle_outlier_threshold:
                 logger.warning('({}) est. angle ({}°) deviates {}° from consensus ({}°) - check diagnostic plot', path.name, f'{angle:.1f}', f'{deviation:.1f}', f'{consensus_angle:.1f}')
 
-        curtain_angle = consensus_angle
-    
     jobs = []
     for path in series_paths:
         relative = path.relative_to(input_dir)
@@ -246,6 +286,8 @@ def _run_stack_batch(
                 angular_width=angular_width,
                 notch_frac=notch_frac,
                 dc_protect_frac=dc_protect_frac,
+                angle_outlier_threshold=angle_outlier_threshold,
+                anchor_tilts=anchor_tilts,
                 force=force,
                 dry_run=dry_run,
             ): path
